@@ -1,6 +1,14 @@
 package handlers
 
-import "net/http"
+import (
+	"encoding/json"
+	db "main/internal/database"
+	dto "main/internal/pkg/DTO"
+	"net/http"
+	"time"
+
+	"github.com/go-playground/validator"
+)
 
 /*pattern: /v1/auth/register
 method:  POST
@@ -17,7 +25,47 @@ failed:
   - status code: 500 Internal Server Error
   - response body: JSON error + time*/
 
-func registerHandler(w http.ResponseWriter, r *http.Request) {}
+// type User struct {
+// 	ID       string `json:"id"`
+// 	Username string `json:"username"`
+// 	Email    string `json:"email"`
+// }
+
+type RegisterRequest struct {
+	Username string `json:"username" validate:"required,min=3,max=30"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=8"`
+}
+
+type RegisterResponse struct {
+	User         db.User `json:"user"`
+	AccessToken  string  `json:"access_token"`
+	RefreshToken string  `json:"refresh_token"`
+}
+
+func registerHandler(w http.ResponseWriter, r *http.Request) {
+	var req RegisterRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		errDTO := dto.ErrDTO{
+			Error: err.Error(),
+			Time:  time.Now().Format(time.RFC3339),
+		}
+		http.Error(w, errDTO.Error, http.StatusBadRequest)
+		return
+	}
+
+	validate := validator.New()
+	if err := validate.Struct(req); err != nil {
+		errDTO := dto.ErrDTO{
+			Error: err.Error(),
+			Time:  time.Now().Format(time.RFC3339),
+		}
+		http.Error(w, errDTO.Error, http.StatusBadRequest)
+		return
+	}
+
+}
 
 /*pattern: /v1/auth/login
 method:  POST
@@ -53,7 +101,8 @@ failed:
 
 func refreshTokenHandler(w http.ResponseWriter, r *http.Request) {}
 
-/*pattern: /v1/auth/logout
+/*
+pattern: /v1/auth/logout
 method:  POST
 info:    Выход с текущей сессии (инвалидация refresh)
 
@@ -64,10 +113,12 @@ succeed:
 failed:
   - status code: 401 Unauthorized
   - status code: 500 Internal Server Error
-  - response body: JSON error + time*/
+  - response body: JSON error + time
+*/
 func logoutHandler(w http.ResponseWriter, r *http.Request) {}
 
-/*pattern: /v1/auth/logout-all
+/*
+pattern: /v1/auth/logout-all
 method:  POST
 info:    Выход со всех устройств/сессий
 
@@ -78,5 +129,6 @@ succeed:
 failed:
   - status code: 401 Unauthorized
   - status code: 500 Internal Server Error
-  - response body: JSON error + time*/
+  - response body: JSON error + time
+*/
 func logoutAllHandler(w http.ResponseWriter, r *http.Request) {}
