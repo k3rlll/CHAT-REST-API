@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"log/slog"
-	"main/internal/pkg/customerrors"
 	"main/internal/service"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -52,18 +51,4 @@ func (r *UserRepository) RegisterUser(
 
 	//TODO: подумай надо что то выводить или нет
 	return userRes, nil
-}
-
-func (r *UserRepository) LogIn(ctx context.Context, password string) error {
-	var passwordHash string
-
-	_ = r.pool.QueryRow(ctx,
-		"SELECT password_hash FROM users WHERE password_hash=$1", passwordHash)
-
-	if !service.CheckPasswordHash(password, passwordHash) {
-		r.logger.Error("invalid password", customerrors.ErrInvalidNicknameOrPassword.Error())
-		return customerrors.ErrInvalidNicknameOrPassword
-	}
-
-	return nil
 }
