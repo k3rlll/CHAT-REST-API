@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	"main/internal/pkg/customerrors"
+	"main/internal/pkg/jwt"
 	"main/internal/service"
 	"time"
 
@@ -31,6 +32,8 @@ func NewTokenRepository(pool *pgxpool.Pool, logger *slog.Logger) *tokenRepositor
 
 func (t *tokenRepository) Login(ctx context.Context, password string) error {
 	var passwordHash string
+
+	jwt.GenerateJWT()
 
 	_ = t.pool.QueryRow(ctx,
 		"SELECT password_hash FROM users WHERE password_hash=$1", passwordHash)
