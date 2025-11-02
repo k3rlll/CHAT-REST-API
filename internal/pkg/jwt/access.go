@@ -6,27 +6,49 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+type TokenPair struct {
+	AccessToken  string `json:"access_token"`  //Живет меньше
+	RefreshToken string `json:"refresh_token"` //Живет дольше
+}
+
 type Claims struct {
 	UserID int64 `json:"user_id"`
 	jwt.RegisteredClaims
 }
 
-func GenerateJWT(userID int64) (string, error) {
-	expirationTime := time.Now().Add(15 * time.Minute)
-	claims := &Claims{
+func GenerateJWT(userID int64) (*TokenPair, error) {
+	accessExpiration := time.Now().Add(15 * time.Minute)
+	accessClaims := &Claims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(expirationTime),
+			ExpiresAt: jwt.NewNumericDate(accessExpiration),
 		},
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte("mysecretkey"))
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
+	accessString, err := accessToken.SignedString([]byte("mysecretkey"))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return tokenString, nil
+	refreshExpiration := time.Now().Add(15 * 24 * time.Hour)
+	refreshClaims := &Claims{
+		UserID: userID,
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(refreshExpiration),
+		},
+	}
+
+	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
+	refreshString, err := refreshToken.SignedString([]byte("mysecretkey"))
+	if err != nil {
+		return nil, err
+	}
+
+	return &TokenPair{
+		AccessToken:  accessString,
+		RefreshToken: refreshString,
+	}, nil
 }
 
 func ValidateJWT(tokenString string) (*Claims, error) {

@@ -6,16 +6,14 @@ import (
 	"main/internal/pkg/customerrors"
 	"main/internal/pkg/jwt"
 	"main/internal/service"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type TokenRepository interface {
-	InsertRefresh(ctx context.Context, userID int64, sessionID, tokenHash string, issuedAt, expiresAt time.Time, ua, ip string) error
-	GetBySession(ctx context.Context, sessionID string) (userID int64, tokenHash string, expiresAt time.Time, err error)
-	DeleteBySession(ctx context.Context, sessionID string) error
-	DeleteAllByUser(ctx context.Context, userID int64) (int64, error)
+	Login(ctx context.Context, userID int64, password string) (*jwt.TokenPair, error)
+	Logout(ctx context.Context, userID int, token jwt.TokenPair) error
+	LogoutAll(ctx context.Context, userID int64) (int64, error)
 }
 
 type tokenRepository struct {
@@ -30,22 +28,46 @@ func NewTokenRepository(pool *pgxpool.Pool, logger *slog.Logger) *tokenRepositor
 	}
 }
 
-func (t *tokenRepository) Login(ctx context.Context, password string) error {
+func (t *tokenRepository) Login(ctx context.Context, userID int, password string) (*jwt.TokenPair, error) {
 	var passwordHash string
 
-	jwt.GenerateJWT()
+	token, err := jwt.GenerateJWT(int64(userID))
+	if err != nil {
+		t.logger.Error("invalid")
+	}
 
 	_ = t.pool.QueryRow(ctx,
 		"SELECT password_hash FROM users WHERE password_hash=$1", passwordHash)
 
 	if !service.CheckPasswordHash(password, passwordHash) {
 		t.logger.Error("invalid password", customerrors.ErrInvalidNicknameOrPassword.Error())
-		return customerrors.ErrInvalidNicknameOrPassword
+		return nil, customerrors.ErrInvalidNicknameOrPassword
+	}
+
+	_ = t.pool.QueryRow(ctx,
+		"INSERT INTO users (refresh_token) VALUES ($1)", token.RefreshToken)
+
+	return token, nil
+}
+
+func (t *tokenRepository) Logout(ctx context.Context, userID int, token jwt.TokenPair) error {
+
+	_, err := t.pool.Exec(ctx,
+		"UPDATE refresh_tokens SET is_revorked=true WHERE user_id=$1 AND token=$2", userID, token.RefreshToken)
+	if err != nil {
+		t.logger.Error("failed to logout user", slog.String("error", err.Error()))
+		return err
 	}
 
 	return nil
 }
 
-func (t *tokenRepository) Logout() error {
+func (t *tokenRepository) LogoutAll(ctx context.Context, userID int) error {
+	_, err := t.pool.Exec(ctx,
+		"UPDATE refresh_tokens SET is_revorked=true WHERE user_id=$1", userID)
+	if err != nil {
+		t.logger.Error("failed to logout all user sessions", slog.String("error", err.Error()))
+		return err
+	}
 	return nil
 }
