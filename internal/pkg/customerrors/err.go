@@ -8,4 +8,5 @@ var (
 	ErrExpiredToken              = errors.New("expired token")
 	ErrEmailAlreadyExists        = errors.New("email already exists")
 	ErrInvalidPassword           = errors.New("password does not meet complexity requirements")
+	ErrMessageDoesNotExists      = errors.New("the messsage does not exists")
 )

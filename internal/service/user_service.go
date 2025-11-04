@@ -2,9 +2,20 @@ package service
 
 import (
 	"fmt"
+	"log/slog"
+
+	db "main/internal/database"
 
 	"golang.org/x/crypto/bcrypt"
 )
+
+type userService struct {
+	Repo   db.UserRepository
+	Logger *slog.Logger
+}
+
+type UserService interface {
+}
 
 func containsUppercase(s string) bool {
 	for _, char := range s {
