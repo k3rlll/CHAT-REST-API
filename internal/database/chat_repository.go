@@ -8,12 +8,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type chat struct {
-	Id        int
-	Name      string
-	IsPrivate bool
-	CreatedAt time.Time
-}
 
 type ChatRepository struct {
 	pool   *pgxpool.Pool
@@ -27,7 +21,7 @@ func NewChatRepository(pool *pgxpool.Pool, logger *slog.Logger) *ChatRepository 
 	}
 }
 
-type Chat interface {
+type ChatInterface interface {
 	//TODO: прописать функции внутри интерфейса
 }
 

@@ -1,28 +1,17 @@
-package database
+package user_repository
 
 import (
 	"context"
 	"log/slog"
+	dom "main/internal/domain/user"
 	"main/internal/pkg/customerrors"
-	"main/internal/service"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type User struct {
-	ID       string `json:"id"`
-	Username string `json:"username"`
-	Email    string `json:"email"`
-}
-
 type UserRepository struct {
 	pool   *pgxpool.Pool
 	logger *slog.Logger
-}
-
-type UserRepositoryInterface interface {
-	RegisterUser(ctx context.Context, username, email, password string) (User, error)
-	SearchUser(ctx context.Context, q string, limit, offset int) ([]User, error)
 }
 
 func NewUserRepository(pool *pgxpool.Pool, logger *slog.Logger) *UserRepository {
@@ -44,39 +33,34 @@ func (r *UserRepository) RegisterUser(
 	ctx context.Context,
 	username string,
 	email string,
-	password string) (User, error) {
-	var userRes User
+	passwordHash string) (dom.User, error) {
+	var userRes dom.User
 
-	passwordHash := service.HashPassword(password)
+	if CheckEmailExists(ctx, r.pool, email) {
+		r.logger.Error("email already exists", customerrors.ErrEmailAlreadyExists.Error())
+		return dom.User{}, customerrors.ErrEmailAlreadyExists
+	}
 
 	tag, err := r.pool.Exec(ctx,
 		"INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3)",
 		username, email, passwordHash)
 	if err != nil {
 		r.logger.Error("failed to insert new user", err.Error())
-		return User{}, err
-	}
-
-	if CheckEmailExists(ctx, r.pool, email) {
-		r.logger.Error("email already exists")
-		return User{}, customerrors.ErrEmailAlreadyExists
-	}
-
-	if !service.ValidatePassword(password) {
-		r.logger.Error("password does not meet complexity requirements")
-		return User{}, customerrors.ErrInvalidPassword
+		return dom.User{}, err
 	}
 
 	if tag.RowsAffected() == 0 {
 		r.logger.Error("no rows affected when inserting new user")
-		return User{}, err
+		return dom.User{}, err
 	}
 
-	//TODO: подумай надо что то выводить или нет
+	_ = r.pool.QueryRow(ctx,
+		"SELECT ID FROM users WHERE email=$1", email).Scan(userRes.ID)
+
 	return userRes, nil
 }
 
-func (r *UserRepository) SearchUser(ctx context.Context, q string, limit, offset int) ([]User, error) {
+func (r *UserRepository) SearchUser(ctx context.Context, q string, limit, offset int) ([]dom.User, error) {
 	const sqlq = `
 SELECT id, email, nickname
 FROM users
@@ -99,9 +83,9 @@ LIMIT $2 OFFSET $3;
 	}
 	defer rows.Close()
 
-	var out []User
+	var out []dom.User
 	for rows.Next() {
-		var u User
+		var u dom.User
 		if err := rows.Scan(&u.ID, &u.Email, &u.Username); err != nil {
 			return nil, err
 		}

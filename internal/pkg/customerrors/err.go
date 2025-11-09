@@ -9,4 +9,5 @@ var (
 	ErrEmailAlreadyExists        = errors.New("email already exists")
 	ErrInvalidPassword           = errors.New("password does not meet complexity requirements")
 	ErrMessageDoesNotExists      = errors.New("the messsage does not exists")
+	ErrEmptyQuery                = errors.New("search query is empty")
 )

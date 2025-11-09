@@ -1,46 +1,41 @@
-package database
+package auth_repo
 
 import (
 	"context"
 	"log/slog"
 	"main/internal/pkg/customerrors"
 	"main/internal/pkg/jwt"
-	"main/internal/service"
+	"main/internal/pkg/utils"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type TokenRepository interface {
-	Login(ctx context.Context, userID int64, password string) (*jwt.TokenPair, error)
-	Logout(ctx context.Context, userID int, token jwt.TokenPair) error
-	LogoutAll(ctx context.Context, userID int64) (int64, error)
-}
+// type TokenRepository interface {
+// 	Login(ctx context.Context, userID int64, password string) (*jwt.TokenPair, error)
+// 	Logout(ctx context.Context, userID int, token jwt.TokenPair) error
+// 	LogoutAll(ctx context.Context, userID int64) (int64, error)
+// }
 
-type tokenRepository struct {
+type TokenRepository struct {
 	pool   *pgxpool.Pool
 	logger *slog.Logger
 }
 
-func NewTokenRepository(pool *pgxpool.Pool, logger *slog.Logger) *tokenRepository {
-	return &tokenRepository{
+func NewTokenRepository(pool *pgxpool.Pool, logger *slog.Logger) *TokenRepository {
+	return &TokenRepository{
 		pool:   pool,
 		logger: logger,
 	}
 }
 
-func (t *tokenRepository) Login(ctx context.Context, userID int, password string) (*jwt.TokenPair, error) {
+func (t *TokenRepository) Login(ctx context.Context, token *jwt.TokenPair, userID int64, password string) (*jwt.TokenPair, error) {
 	var passwordHash string
-
-	token, err := jwt.GenerateJWT(int64(userID))
-	if err != nil {
-		t.logger.Error("invalid")
-	}
 
 	_ = t.pool.QueryRow(ctx,
 		"SELECT password_hash FROM users WHERE password_hash=$1", passwordHash)
 
-	if !service.CheckPasswordHash(password, passwordHash) {
-		t.logger.Error("invalid password", customerrors.ErrInvalidNicknameOrPassword.Error())
+	if !utils.CheckPasswordHash(password, passwordHash) {
+		t.logger.Error("failed to login: invalid password")
 		return nil, customerrors.ErrInvalidNicknameOrPassword
 	}
 
@@ -50,7 +45,7 @@ func (t *tokenRepository) Login(ctx context.Context, userID int, password string
 	return token, nil
 }
 
-func (t *tokenRepository) Logout(ctx context.Context, userID int, token jwt.TokenPair) error {
+func (t *TokenRepository) Logout(ctx context.Context, userID int64, token jwt.TokenPair) error {
 
 	_, err := t.pool.Exec(ctx,
 		"UPDATE refresh_tokens SET is_revorked=true WHERE user_id=$1 AND token=$2", userID, token.RefreshToken)
@@ -62,7 +57,7 @@ func (t *tokenRepository) Logout(ctx context.Context, userID int, token jwt.Toke
 	return nil
 }
 
-func (t *tokenRepository) LogoutAll(ctx context.Context, userID int) error {
+func (t *TokenRepository) LogoutAll(ctx context.Context, userID int64) error {
 	_, err := t.pool.Exec(ctx,
 		"UPDATE refresh_tokens SET is_revorked=true WHERE user_id=$1", userID)
 	if err != nil {
