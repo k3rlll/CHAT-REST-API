@@ -77,7 +77,7 @@ func (s *service) SearchUser(ctx context.Context, p SearchUsersParams) ([]dom.Us
 
 	ctx, cancel := context.WithTimeout(ctx, s.Timeout)
 	defer cancel()
-
+ 
 	users, err := s.Repo.SearchUser(ctx, q, limit, offset)
 	if err != nil {
 		s.Logger.Error("failed to search users", err.Error())

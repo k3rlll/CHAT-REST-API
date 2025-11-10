@@ -3,11 +3,9 @@ package database
 import (
 	"context"
 	"log/slog"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
-
 
 type ChatRepository struct {
 	pool   *pgxpool.Pool
@@ -21,8 +19,15 @@ func NewChatRepository(pool *pgxpool.Pool, logger *slog.Logger) *ChatRepository 
 	}
 }
 
-type ChatInterface interface {
-	//TODO: прописать функции внутри интерфейса
+func (c *ChatRepository) CheckIsMemberOfChat(ctx context.Context, chatID int, userID int, logger *slog.Logger) (bool, error) {
+	isMember := false
+	err := c.pool.QueryRow(ctx,
+		"SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2)", chatID, userID).Scan(&isMember)
+	if err != nil {
+		return false, err
+	}
+	return isMember, nil
+
 }
 
 func (c *ChatRepository) CreateChat(ctx context.Context, name string, isPrivate bool, userIDs []int) (string, int, error) {
@@ -49,7 +54,7 @@ func (c *ChatRepository) CreateChat(ctx context.Context, name string, isPrivate 
 		c.logger.Error("failed to begin transaction", err.Error())
 		return "", 0, err
 	}
-	defer tx.Rollback()
+	defer tx.Rollback(ctx)
 
 	err = tx.QueryRow(ctx,
 		"INSERT INTO chats (name, is_private) VALUES ($1, $2) RETURNING id", name, isPrivate).Scan(&chatId)
