@@ -10,11 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// type TokenRepository interface {
-// 	Login(ctx context.Context, userID int64, password string) (*jwt.TokenPair, error)
-// 	Logout(ctx context.Context, userID int, token jwt.TokenPair) error
-// 	LogoutAll(ctx context.Context, userID int64) (int64, error)
-// }
+
 
 type TokenRepository struct {
 	pool   *pgxpool.Pool

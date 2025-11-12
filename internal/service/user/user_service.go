@@ -3,7 +3,6 @@ package user
 import (
 	"context"
 	"log/slog"
-	db "main/internal/database/user_repo"
 	dom "main/internal/domain/user"
 	"main/internal/pkg/customerrors"
 	"main/internal/pkg/utils"
@@ -17,18 +16,18 @@ type SearchUsersParams struct {
 	Offset int
 }
 
-type service struct {
-	Repo     *db.UserRepository
+type UserService struct {
+	Repo     dom.UserRepository
 	Logger   *slog.Logger
 	Timeout  time.Duration
 	MaxLimit int
 }
 
-func NewUserService(repo *db.UserRepository, logger *slog.Logger) *service {
+func NewUserService(repo dom.UserRepository, logger *slog.Logger) *UserService {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &service{
+	return &UserService{
 		Repo:     repo,
 		Logger:   logger,
 		Timeout:  3 * time.Second,
@@ -36,7 +35,7 @@ func NewUserService(repo *db.UserRepository, logger *slog.Logger) *service {
 	}
 }
 
-func (s *service) RegisterUser(ctx context.Context, username, email, password string) (dom.User, error) {
+func (s *UserService) RegisterUser(ctx context.Context, username, email, password string) (dom.User, error) {
 
 	if !utils.ValidatePassword(password) {
 		s.Logger.Error("password does not meet complexity requirements")
@@ -46,6 +45,7 @@ func (s *service) RegisterUser(ctx context.Context, username, email, password st
 	passwordHash, err := utils.HashPassword(password)
 	if err != nil {
 		s.Logger.Error("failed to hash password", err.Error())
+		return dom.User{}, err
 	}
 
 	res, err := s.Repo.RegisterUser(ctx, username, email, passwordHash)
@@ -53,11 +53,17 @@ func (s *service) RegisterUser(ctx context.Context, username, email, password st
 		s.Logger.Error("failed to register user", err.Error())
 		return dom.User{}, err
 	}
+
+	res = dom.User{
+		ID:       res.ID,
+		Username: res.Username,
+		Email:    res.Email,
+	}
 	return res, nil
 
 }
 
-func (s *service) SearchUser(ctx context.Context, p SearchUsersParams) ([]dom.User, error) {
+func (s *UserService) SearchUser(ctx context.Context, p SearchUsersParams) ([]dom.User, error) {
 	q := strings.TrimSpace(p.Q)
 	if q == "" {
 		return []dom.User{}, customerrors.ErrEmptyQuery
@@ -77,7 +83,7 @@ func (s *service) SearchUser(ctx context.Context, p SearchUsersParams) ([]dom.Us
 
 	ctx, cancel := context.WithTimeout(ctx, s.Timeout)
 	defer cancel()
- 
+
 	users, err := s.Repo.SearchUser(ctx, q, limit, offset)
 	if err != nil {
 		s.Logger.Error("failed to search users", err.Error())
