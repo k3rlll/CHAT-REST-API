@@ -4,7 +4,7 @@ import "time"
 
 type Chat struct {
 	Id        int
-	Name      string
+	Title     string
 	IsPrivate bool
 	CreatedAt time.Time
 }

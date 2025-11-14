@@ -1,22 +1,18 @@
 package jwt
 
 import (
+	dom "main/internal/domain/auth"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
-
-type TokenPair struct {
-	AccessToken  string `json:"access_token"`  //Живет меньше
-	RefreshToken string `json:"refresh_token"` //Живет дольше
-}
 
 type Claims struct {
 	UserID int64 `json:"user_id"`
 	jwt.RegisteredClaims
 }
 
-func GenerateJWT(userID int64) (*TokenPair, error) {
+func GenerateJWT(userID int64) (*dom.TokenPair, error) {
 	accessExpiration := time.Now().Add(15 * time.Minute)
 	accessClaims := &Claims{
 		UserID: userID,
@@ -45,7 +41,7 @@ func GenerateJWT(userID int64) (*TokenPair, error) {
 		return nil, err
 	}
 
-	return &TokenPair{
+	return &dom.TokenPair{
 		AccessToken:  accessString,
 		RefreshToken: refreshString,
 	}, nil

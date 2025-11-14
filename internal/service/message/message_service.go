@@ -8,22 +8,21 @@ import (
 	"main/internal/pkg/customerrors"
 )
 
-type messageService struct {
+type MessageService struct {
 	Chat    ch.ChatRepository
 	Message msg.MessageRepository
 	Logger  *slog.Logger
 }
 
-
-func NewMessageService(chat ch.ChatRepository, message msg.MessageRepository, logger *slog.Logger) *messageService {
-	return &messageService{
+func NewMessageService(chat ch.ChatRepository, message msg.MessageRepository, logger *slog.Logger) *MessageService {
+	return &MessageService{
 		Chat:    chat,
 		Message: message,
 		Logger:  logger,
 	}
 }
 
-func (m *messageService) Send(ctx context.Context, chatID int, userID int, text string) (msg.Message, error) {
+func (m *MessageService) Send(ctx context.Context, chatID int, userID int, text string) (msg.Message, error) {
 	isMember, err := m.Chat.CheckIsMemberOfChat(ctx, chatID, userID, m.Logger)
 	if err != nil {
 		m.Logger.Error("failed to check if user is member of chat", err.Error())
@@ -43,7 +42,7 @@ func (m *messageService) Send(ctx context.Context, chatID int, userID int, text 
 	return message, nil
 }
 
-func (m *messageService) Delete(ctx context.Context, messageID int) error {
+func (m *MessageService) Delete(ctx context.Context, messageID int) error {
 	exists, err := m.Message.CheckMessageExists(ctx, messageID)
 	if err != nil {
 		m.Logger.Error(err.Error())
@@ -63,7 +62,7 @@ func (m *messageService) Delete(ctx context.Context, messageID int) error {
 
 }
 
-func (m *messageService) Edit(ctx context.Context, messageID int, newText string) error {
+func (m *MessageService) Edit(ctx context.Context, messageID int, newText string) error {
 	if newText == "" {
 		m.Logger.Error("new message text is empty")
 		return customerrors.ErrMessageIsEmpty
@@ -85,7 +84,7 @@ func (m *messageService) Edit(ctx context.Context, messageID int, newText string
 
 }
 
-func (m *messageService) List(ctx context.Context, chatID int64, limit, offset int) ([]msg.Message, error) {
+func (m *MessageService) List(ctx context.Context, chatID int64, limit, offset int) ([]msg.Message, error) {
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}

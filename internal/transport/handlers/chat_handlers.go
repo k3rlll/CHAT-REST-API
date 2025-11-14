@@ -1,6 +1,32 @@
 package handlers
 
-import "net/http"
+import (
+	"encoding/json"
+	"log/slog"
+	srvAuth "main/internal/service/auth"
+	srvChat "main/internal/service/chat"
+	srvMessage "main/internal/service/message"
+	srvUser "main/internal/service/user"
+	"net/http"
+)
+
+type ChatHandler struct {
+	UserSrv *srvUser.UserService
+	AuthSrv *srvAuth.AuthService
+	MessSrv *srvMessage.MessageService
+	ChatSrv *srvChat.ChatService
+	logger  *slog.Logger
+}
+
+func NewChatHandler(userSrv *srvUser.UserService, authSrv *srvAuth.AuthService, messSrv *srvMessage.MessageService, chatSrv *srvChat.ChatService, logger *slog.Logger) *ChatHandler {
+	return &ChatHandler{
+		UserSrv: userSrv,
+		AuthSrv: authSrv,
+		MessSrv: messSrv,
+		ChatSrv: chatSrv,
+		logger:  logger,
+	}
+}
 
 /*pattern: /v1/chats
 method:  POST
@@ -20,7 +46,24 @@ failed:
   - response body: JSON error + time
 */
 
-func CreateChatHandler(w http.ResponseWriter, r *http.Request)
+func (h *ChatHandler) CreateChatHandler(w http.ResponseWriter, r *http.Request) {
+
+	var members []int
+
+	if err := json.NewDecoder(r.Body).Decode(&members); err != nil {
+		h.logger.Error("failed to decode request", slog.String("error", err.Error()))
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	_, err := h.ChatSrv.CreateChat(r.Context(), false, "title", members)
+	if err != nil {
+		h.logger.Error("failed to create chat", slog.String("error", err.Error()))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
 
 // pattern: /v1/chats
 // method:  GET
@@ -37,7 +80,27 @@ func CreateChatHandler(w http.ResponseWriter, r *http.Request)
 //   - status code: 500 Internal Server Error
 //   - response body: JSON error + time
 
-func getChatsHandler(w http.ResponseWriter, r *http.Request) {}
+func (h *ChatHandler) getChatsHandler(w http.ResponseWriter, r *http.Request) {
+	chats, err := h.ChatSrv.ListOfChats(r.Context())
+	if err != nil {
+		h.logger.Error("failed to get list of chats", slog.String("error", err.Error()))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	b, err := json.MarshalIndent(chats, "", "  ")
+	if err != nil {
+		h.logger.Error("failed to marshal response", slog.String("error", err.Error()))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := w.Write(b); err != nil {
+		h.logger.Error("failed to write response", slog.String("error", err.Error()))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+}
 
 // pattern: /v1/chats/{id}
 // method:  GET
@@ -71,7 +134,25 @@ func viewChatHandler(w http.ResponseWriter, r *http.Request) {}
 //   - status code: 409 Conflict (состояние не позволяет)
 //   - status code: 500 Internal Server Error
 //   - response body: JSON error + time
-func deleteChatHandler(w http.ResponseWriter, r *http.Request) {}
+func (h *ChatHandler) deleteChatHandler(w http.ResponseWriter, r *http.Request) {
+
+	var chat_id int
+
+	if err := json.NewDecoder(r.Body).Decode(&chat_id); err != nil {
+		h.logger.Error("failed to decode request", slog.String("error", err.Error()))
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if err := h.ChatSrv.DeleteChat(r.Context(), chat_id); err != nil {
+		h.logger.Error("failed to delete chat", slog.String("error", err.Error()))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+
+}
 
 // pattern: /v1/chats/{id}/members
 // method:  GET

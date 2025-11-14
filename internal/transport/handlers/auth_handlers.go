@@ -14,20 +14,16 @@ import (
 )
 
 type AuthHandler struct {
-	UserSrv       *srvUser.UserService
-	AuthSrv       *srvAuth.AuthService
-	logger        *slog.Logger
-	MaxAtttempts  int
-	BlockDuration time.Duration
+	UserSrv *srvUser.UserService
+	AuthSrv *srvAuth.AuthService
+	logger  *slog.Logger
 }
 
 func NewAuthHandler(userSrv *srvUser.UserService, authSrv *srvAuth.AuthService, logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{
-		UserSrv:       userSrv,
-		AuthSrv:       authSrv,
-		logger:        logger,
-		MaxAtttempts:  5,
-		BlockDuration: 15 * time.Minute,
+		UserSrv: userSrv,
+		AuthSrv: authSrv,
+		logger:  logger,
 	}
 }
 
@@ -112,18 +108,6 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	blocked, err := h.AuthSrv.CheckIfBlocked(r.Context(), u.ID)
-	if err != nil {
-		h.logger.Error("failed to check if user is blocked", slog.String("error", err.Error()))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-	if blocked {
-		http.Error(w, "User is blocked due to multiple failed login attempts", http.StatusTooManyRequests)
-		h.logger.Info("blocked login attempt", slog.String("user_id", strconv.FormatInt(u.ID, 10)))
-		return
-	}
-
 	token, err := h.AuthSrv.LoginUser(r.Context(), u.ID, u.Password)
 	if err != nil {
 		if errors.Is(err, customerrors.ErrInvalidNicknameOrPassword) {
@@ -144,25 +128,16 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 	})
-}
 
-/*pattern: /v1/auth/token/refresh
-method:  POST
-info:    Обновление пары токенов по refresh
-
-succeed:
-  - status code: 200 OK
-  - response body: JSON { access_token, refresh_token, issued_at }
-
-failed:
-  - status code: 400 Bad Request
-  - status code: 401 Unauthorized (просрочен/заблокирован/невалиден refresh)
-  - status code: 429 Too Many Requests
-  - status code: 500 Internal Server Error
-  - response body: JSON error + time*/
-
-func refreshTokenHandler(w http.ResponseWriter, r *http.Request) {
-	
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    token.RefreshToken,
+		HttpOnly: true,
+		Path:     "/auth",
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	})
+	w.WriteHeader(http.StatusOK)
 }
 
 /*
@@ -179,7 +154,29 @@ failed:
   - status code: 500 Internal Server Error
   - response body: JSON error + time
 */
-func logoutHandler(w http.ResponseWriter, r *http.Request) {}
+
+func (h *AuthHandler) logoutHandler(w http.ResponseWriter, r *http.Request) {
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Secure:   true,
+	})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "access_token",
+		Value:    "",
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		SameSite: http.SameSiteStrictMode,
+		Secure:   true,
+	})
+
+	w.WriteHeader(http.StatusNoContent)
+}
 
 /*
 pattern: /v1/auth/logout-all
@@ -195,4 +192,3 @@ failed:
   - status code: 500 Internal Server Error
   - response body: JSON error + time
 */
-func logoutAllHandler(w http.ResponseWriter, r *http.Request) {}

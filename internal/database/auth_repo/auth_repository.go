@@ -3,8 +3,8 @@ package auth_repo
 import (
 	"context"
 	"log/slog"
+	dom "main/internal/domain/auth"
 	"main/internal/pkg/customerrors"
-	"main/internal/pkg/jwt"
 	"main/internal/pkg/utils"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -25,14 +25,14 @@ func NewTokenRepository(pool *pgxpool.Pool, logger *slog.Logger) *TokenRepositor
 func (t *TokenRepository) SaveRefreshToken(ctx context.Context, userID int64, refreshToken string) error {
 
 	_, err := t.pool.Exec(ctx, `
-        INSERT INTO refresh_tokens (user_id, refresh_token, expires_at)
-        VALUES ($1, $2, $3)`,
-		userID, refreshToken, expiresAt)
+        INSERT INTO refresh_tokens (user_id, refresh_token)
+        VALUES ($1, $2)`,
+		userID, refreshToken)
 
 	return err
 }
 
-func (t *TokenRepository) Login(ctx context.Context, token *jwt.TokenPair, userID int64, password string) (*jwt.TokenPair, error) {
+func (t *TokenRepository) Login(ctx context.Context, token *dom.TokenPair, userID int64, password string) (*dom.TokenPair, error) {
 	var passwordHash string
 
 	err := t.pool.QueryRow(ctx,
@@ -55,24 +55,3 @@ func (t *TokenRepository) Login(ctx context.Context, token *jwt.TokenPair, userI
 	return token, nil
 }
 
-func (t *TokenRepository) Logout(ctx context.Context, userID int64, token jwt.TokenPair) error {
-
-	_, err := t.pool.Exec(ctx,
-		"UPDATE refresh_tokens SET is_revorked=true WHERE user_id=$1 AND token=$2", userID, token.RefreshToken)
-	if err != nil {
-		t.logger.Error("failed to logout user", slog.String("error", err.Error()))
-		return err
-	}
-
-	return nil
-}
-
-func (t *TokenRepository) LogoutAll(ctx context.Context, userID int64) error {
-	_, err := t.pool.Exec(ctx,
-		"UPDATE refresh_tokens SET is_revorked=true WHERE user_id=$1", userID)
-	if err != nil {
-		t.logger.Error("failed to logout all user sessions", slog.String("error", err.Error()))
-		return err
-	}
-	return nil
-}
