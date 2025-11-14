@@ -111,7 +111,20 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-	tokenPair, err := h.AuthSrv.LoginUser(r.Context(), u.ID, u.Password)
+
+	blocked, err := h.AuthSrv.CheckIfBlocked(r.Context(), u.ID)
+	if err != nil {
+		h.logger.Error("failed to check if user is blocked", slog.String("error", err.Error()))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	if blocked {
+		http.Error(w, "User is blocked due to multiple failed login attempts", http.StatusTooManyRequests)
+		h.logger.Info("blocked login attempt", slog.String("user_id", strconv.FormatInt(u.ID, 10)))
+		return
+	}
+
+	token, err := h.AuthSrv.LoginUser(r.Context(), u.ID, u.Password)
 	if err != nil {
 		if errors.Is(err, customerrors.ErrInvalidNicknameOrPassword) {
 			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
@@ -122,6 +135,15 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "access_token",
+		Value:    token.AccessToken,
+		HttpOnly: true,
+		Path:     "/",
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
+	})
 }
 
 /*pattern: /v1/auth/token/refresh
@@ -139,7 +161,9 @@ failed:
   - status code: 500 Internal Server Error
   - response body: JSON error + time*/
 
-func refreshTokenHandler(w http.ResponseWriter, r *http.Request) {}
+func refreshTokenHandler(w http.ResponseWriter, r *http.Request) {
+	
+}
 
 /*
 pattern: /v1/auth/logout
