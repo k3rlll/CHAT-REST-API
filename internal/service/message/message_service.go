@@ -23,7 +23,7 @@ func NewMessageService(chat ch.ChatRepository, message msg.MessageRepository, lo
 }
 
 func (m *MessageService) Send(ctx context.Context, chatID int, userID int, text string) (msg.Message, error) {
-	isMember, err := m.Chat.CheckIsMemberOfChat(ctx, chatID, userID, m.Logger)
+	isMember, err := m.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
 	if err != nil {
 		m.Logger.Error("failed to check if user is member of chat", err.Error())
 		return msg.Message{}, err

@@ -5,9 +5,14 @@ import (
 	"errors"
 	"log/slog"
 	dom "main/internal/domain/chat"
+	domMessage "main/internal/domain/message"
+	domUser "main/internal/domain/user"
+	"main/internal/pkg/customerrors"
+	"strings"
 )
 
 type ChatService struct {
+	User   domUser.UserRepository
 	Chat   dom.ChatRepository
 	Logger *slog.Logger
 }
@@ -66,4 +71,91 @@ func (c *ChatService) ListOfChats(ctx context.Context) ([]dom.Chat, error) {
 
 	return c.Chat.ListOfChats(ctx)
 
+}
+
+func (c *ChatService) GetChatDetails(ctx context.Context, chatID int, userID int) (dom.Chat, error) {
+
+	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
+	if err != nil {
+		c.Logger.Error("failed to check membership", err.Error())
+		return dom.Chat{}, customerrors.ErrFailedToCheck
+	}
+	if !isMember {
+		c.Logger.Info("user is not a member of the chat", nil)
+		return dom.Chat{}, customerrors.ErrUserNotMemberOfChat
+	}
+	chat, err := c.Chat.GetChatDetails(ctx, chatID)
+	if err != nil {
+		c.Logger.Error("failed to get chat details", err.Error())
+		return dom.Chat{}, err
+	}
+	return chat, nil
+}
+
+func (c *ChatService) OpenChat(ctx context.Context, chatID int, userID int) (dom.Chat, []domMessage.Message, error) {
+
+	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
+	if err != nil {
+		c.Logger.Error("failed to check membership", err.Error())
+		return dom.Chat{}, nil, customerrors.ErrFailedToCheck
+	}
+	if !isMember {
+		c.Logger.Info("user is not a member of the chat", nil)
+		return dom.Chat{}, nil, customerrors.ErrUserNotMemberOfChat
+	}
+
+	details, err := c.Chat.GetChatDetails(ctx, chatID)
+	if err != nil {
+		c.Logger.Error("failed to get chat details", err.Error())
+		return dom.Chat{}, nil, err
+	}
+	for i, member := range details.Members {
+		details.Members[i] = strings.TrimSpace(member)
+
+	}
+	details.MembersCount = len(details.Members)
+	details.Members = nil
+
+	messages, err := c.Chat.OpenChat(ctx, chatID, userID)
+	if err != nil {
+		c.Logger.Error("failed to open chat", err.Error())
+		return dom.Chat{}, nil, err
+	}
+
+	return details, messages, nil
+}
+
+func (c *ChatService) AddMembers(ctx context.Context, chatID int, UserID int, members []int) error {
+	if c.User.CheckUserExists(ctx, UserID) {
+		c.Logger.Info("user does not exist", nil)
+		return customerrors.ErrUserDoesNotExist
+	}
+
+	inChat, err := c.Chat.UserInChat(ctx, chatID, UserID)
+	if err != nil {
+		c.Logger.Error("failed to check if user is in chat", err.Error())
+		return err
+	}
+	if inChat {
+		c.Logger.Info("user is already in the chat", nil)
+		return customerrors.ErrUserAlreadyInChat
+	}
+
+	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, UserID)
+	if err != nil {
+		c.Logger.Error("failed to check membership", err.Error())
+		return customerrors.ErrFailedToCheck
+	}
+	if !isMember {
+		c.Logger.Info("user is not a member of the chat", nil)
+		return customerrors.ErrUserNotMemberOfChat
+	}
+
+	err = c.Chat.AddMembers(ctx, chatID, members)
+	if err != nil {
+		c.Logger.Error("failed to add members to chat", err.Error())
+		return err
+	}
+
+	return nil
 }

@@ -61,7 +61,7 @@ func (m *MessageRepository) Create(ctx context.Context, chatID int, userID int, 
 		Text:      text,
 		CreatedAt: time.Now(),
 		ChatID:    chatID,
-		UserID:    userID,
+		SenderID:  userID,
 	}
 
 	return res, nil
@@ -92,7 +92,7 @@ func (m *MessageRepository) ListByChat(ctx context.Context, chatID int64, limit 
 	var out []dom.Message
 	for rows.Next() {
 		var m dom.Message
-		if err := rows.Scan(&m.Id, &m.ChatID, &m.UserID, &m.Text, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.Id, &m.ChatID, &m.SenderID, &m.Text, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, m)

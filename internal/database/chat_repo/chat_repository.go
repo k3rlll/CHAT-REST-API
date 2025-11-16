@@ -3,7 +3,8 @@ package database
 import (
 	"context"
 	"log/slog"
-	dom "main/internal/domain/chat"
+	domChat "main/internal/domain/chat"
+	domMessage "main/internal/domain/message"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -20,11 +21,12 @@ func NewChatRepository(pool *pgxpool.Pool, logger *slog.Logger) *ChatRepository 
 	}
 }
 
-func (c *ChatRepository) CheckIsMemberOfChat(ctx context.Context, chatID int, userID int, logger *slog.Logger) (bool, error) {
+func (c *ChatRepository) CheckIsMemberOfChat(ctx context.Context, chatID int, userID int) (bool, error) {
 	isMember := false
 	err := c.pool.QueryRow(ctx,
 		"SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2)", chatID, userID).Scan(&isMember)
 	if err != nil {
+		c.logger.Error("failed to check if user is a member of the chat", err.Error())
 		return false, err
 	}
 	return isMember, nil
@@ -95,9 +97,9 @@ func (c *ChatRepository) CheckIfChatExists(ctx context.Context, chatID int) (boo
 	return exists, err
 }
 
-func (c *ChatRepository) ListOfChats(ctx context.Context) ([]dom.Chat, error) {
+func (c *ChatRepository) ListOfChats(ctx context.Context) ([]domChat.Chat, error) {
 
-	var chats []dom.Chat
+	var chats []domChat.Chat
 	query := "SELECT title FROM chats"
 
 	rows, err := c.pool.Query(ctx, query)
@@ -107,7 +109,7 @@ func (c *ChatRepository) ListOfChats(ctx context.Context) ([]dom.Chat, error) {
 	defer rows.Close()
 
 	for rows.Next() {
-		var chat dom.Chat
+		var chat domChat.Chat
 		if err := rows.Scan(&chat.Title); err != nil {
 			return nil, err
 		}
@@ -120,4 +122,67 @@ func (c *ChatRepository) ListOfChats(ctx context.Context) ([]dom.Chat, error) {
 
 	return chats, nil
 
+}
+
+func (c *ChatRepository) GetChatDetails(ctx context.Context, chatID int) (domChat.Chat, error) {
+
+	var chat domChat.Chat
+	query := "SELECT id, title, is_private, members FROM chats WHERE id=$1"
+	err := c.pool.QueryRow(ctx, query, chatID).Scan(&chat.Id, &chat.Title, &chat.IsPrivate, &chat.Members)
+	if err != nil {
+		c.logger.Error("failed to get chat details", err.Error())
+		return domChat.Chat{}, err
+	}
+	return domChat.Chat{
+		Id:        chat.Id,
+		Title:     chat.Title,
+		IsPrivate: chat.IsPrivate,
+		Members:   chat.Members,
+	}, nil
+}
+
+func (c *ChatRepository) OpenChat(ctx context.Context, chatID int, userID int) ([]domMessage.Message, error) {
+
+	rows, err := c.pool.Query(ctx,
+		"SELECT messages.id, messages.chat_id, messages.sender_id, messages.content, messages.created_at "+
+			"FROM messages "+
+			"JOIN chat_members ON messages.chat_id = chat_members.chat_id "+
+			"WHERE chat_members.user_id = $1 AND messages.chat_id = $2 "+
+			"ORDER BY messages.created_at DESC", userID, chatID)
+	if err != nil {
+		return nil, err
+	}
+
+	messages := []domMessage.Message{}
+	for rows.Next() {
+		var message domMessage.Message
+		if err := rows.Scan(&message.Id, &message.ChatID, &message.SenderID, &message.Text, &message.CreatedAt); err != nil {
+			c.logger.Error("failed to scan message", err.Error())
+			return nil, err
+		}
+		messages = append(messages, message)
+	}
+
+	defer rows.Close()
+
+	return messages, nil
+}
+
+func (c *ChatRepository) AddMembers(ctx context.Context, chatID int, members []int) error {
+	for _, userID := range members {
+		_, err := c.pool.Exec(ctx,
+			"INSERT INTO chat_members (chat_id, user_id) VALUES ($1, $2)", chatID, userID)
+		if err != nil {
+			c.logger.Error("failed to add member to chat", err.Error())
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *ChatRepository) UserInChat(ctx context.Context, chatID int, userID int) (bool, error) {
+	isMember := false
+	err := c.pool.QueryRow(ctx,
+		"SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2)", chatID, userID).Scan(&isMember)
+	return isMember, err
 }

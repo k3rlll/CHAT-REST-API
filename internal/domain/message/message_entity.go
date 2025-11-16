@@ -9,5 +9,5 @@ type Message struct {
 	Text      string
 	CreatedAt time.Time
 	ChatID    int
-	UserID    int
+	SenderID  int
 }

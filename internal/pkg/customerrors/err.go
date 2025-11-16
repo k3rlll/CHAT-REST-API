@@ -12,4 +12,7 @@ var (
 	ErrEmptyQuery                = errors.New("search query is empty")
 	ErrUserNotMemberOfChat       = errors.New("user is not a member of the chat")
 	ErrMessageIsEmpty            = errors.New("message text is empty")
+	ErrFailedToCheck             = errors.New("failed to check")
+	ErrUserDoesNotExist          = errors.New("user does not exist")
+	ErrUserAlreadyInChat         = errors.New("user is already in the chat")
 )

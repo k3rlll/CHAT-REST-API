@@ -96,3 +96,13 @@ LIMIT $2 OFFSET $3;
 	}
 	return out, nil
 }
+
+func (r *UserRepository) CheckUserExists(ctx context.Context, userID int) bool {
+	var exists bool
+	err := r.pool.QueryRow(ctx,
+		"SELECT EXISTS (SELECT 1 FROM users WHERE id=$1)", userID).Scan(&exists)
+	if err != nil {
+		return false
+	}
+	return exists
+}
