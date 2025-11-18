@@ -61,17 +61,16 @@ func (r *UserRepository) RegisterUser(
 }
 
 func (r *UserRepository) SearchUser(ctx context.Context, q string, limit, offset int) ([]dom.User, error) {
+
 	const sqlq = `
-SELECT id, email, nickname
+SELECT id, nickname
 FROM users
 WHERE
       email = $1
    OR CAST(id AS TEXT) = $1
    OR nickname = $1
-   OR email ILIKE '%' || $1 || '%'
    OR nickname ILIKE '%' || $1 || '%'
 ORDER BY
-   (email = $1) DESC,
    (CAST(id AS TEXT) = $1) DESC,
    (nickname = $1) DESC,
    id
@@ -86,7 +85,7 @@ LIMIT $2 OFFSET $3;
 	var out []dom.User
 	for rows.Next() {
 		var u dom.User
-		if err := rows.Scan(&u.ID, &u.Email, &u.Username); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username); err != nil {
 			return nil, err
 		}
 		out = append(out, u)
@@ -94,6 +93,7 @@ LIMIT $2 OFFSET $3;
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
 	return out, nil
 }
 

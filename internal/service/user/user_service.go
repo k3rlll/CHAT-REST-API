@@ -10,11 +10,10 @@ import (
 	"time"
 )
 
-type SearchUsersParams struct {
-	Q      string
-	Limit  int
-	Offset int
-}
+var (
+	SearchLimit  = 10
+	SearchOffset = 0
+)
 
 type UserService struct {
 	Repo     dom.UserRepository
@@ -63,20 +62,20 @@ func (s *UserService) RegisterUser(ctx context.Context, username, email, passwor
 
 }
 
-func (s *UserService) SearchUser(ctx context.Context, p SearchUsersParams) ([]dom.User, error) {
-	q := strings.TrimSpace(p.Q)
+func (s *UserService) SearchUser(ctx context.Context, message string) ([]dom.User, error) {
+	q := strings.TrimSpace(message)
 	if q == "" {
 		return []dom.User{}, customerrors.ErrEmptyQuery
 	}
 
-	limit := p.Limit
+	limit := SearchLimit
 	if limit <= 0 {
 		limit = 10
 	}
 	if limit > s.MaxLimit {
 		limit = s.MaxLimit
 	}
-	offset := p.Offset
+	offset := SearchOffset
 	if offset < 0 {
 		offset = 0
 	}

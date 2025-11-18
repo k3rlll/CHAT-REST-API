@@ -24,7 +24,11 @@ type ChatHandler struct {
 	logger  *slog.Logger
 }
 
-func NewChatHandler(userSrv *srvUser.UserService, authSrv *srvAuth.AuthService, messSrv *srvMessage.MessageService, chatSrv *srvChat.ChatService, logger *slog.Logger) *ChatHandler {
+func NewChatHandler(userSrv *srvUser.UserService,
+	authSrv *srvAuth.AuthService,
+	messSrv *srvMessage.MessageService,
+	chatSrv *srvChat.ChatService,
+	logger *slog.Logger) *ChatHandler {
 	return &ChatHandler{
 		UserSrv: userSrv,
 		AuthSrv: authSrv,

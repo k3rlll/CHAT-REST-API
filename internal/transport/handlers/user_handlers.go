@@ -1,6 +1,40 @@
 package handlers
 
-import "net/http"
+import (
+	"encoding/json"
+	"log/slog"
+	srvAuth "main/internal/service/auth"
+	srvChat "main/internal/service/chat"
+	srvMessage "main/internal/service/message"
+	srvUser "main/internal/service/user"
+	"net/http"
+
+	"github.com/gorilla/websocket"
+)
+
+type UserHandler struct {
+	UserSrv  *srvUser.UserService
+	AuthSrv  *srvAuth.AuthService
+	MessSrv  *srvMessage.MessageService
+	ChatSrv  *srvChat.ChatService
+	upgrader websocket.Upgrader
+	logger   *slog.Logger
+}
+
+func NewUserHandler(userSrv *srvUser.UserService,
+	authSrv *srvAuth.AuthService,
+	messSrv *srvMessage.MessageService,
+	chatSrv *srvChat.ChatService,
+	logger *slog.Logger) *UserHandler {
+	return &UserHandler{
+		UserSrv:  userSrv,
+		AuthSrv:  authSrv,
+		MessSrv:  messSrv,
+		ChatSrv:  chatSrv,
+		upgrader: websocket.Upgrader{},
+		logger:   logger,
+	}
+}
 
 /*pattern: /v1/me
 method:  GET
@@ -34,7 +68,8 @@ failed:
 
 func userByIDHandler(w http.ResponseWriter, r *http.Request) {}
 
-/*pattern: /v1/users
+/*
+pattern: /v1/users
 method:  GET
 info:    Поиск пользователей; параметры: q, limit, cursor
 
@@ -47,10 +82,50 @@ failed:
   - status code: 401 Unauthorized
   - status code: 429 Too Many Requests
   - status code: 500 Internal Server Error
-  - response body: JSON error + time*/
-func usersSearchHandler(w http.ResponseWriter, r *http.Request) {}
+  - response body: JSON error + time
+*/
+func (h *UserHandler) usersSearchHandler(w http.ResponseWriter, r *http.Request) {
+	conn, err := h.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		h.logger.Error("failed to upgrade connection", slog.String("error", err.Error()))
+		http.Error(w, "Failed to upgrade connection", http.StatusInternalServerError)
+		return
+	}
+	defer conn.Close()
 
-/*pattern: /v1/users/{id}/block
+	for {
+		_, message, err := conn.ReadMessage()
+		if err != nil {
+			h.logger.Error("failed to read message", slog.String("error", err.Error()))
+			break
+		}
+		h.logger.Info("received message", slog.String("message", string(message)))
+
+		result, err := h.UserSrv.SearchUser(r.Context(), string(message))
+		if err != nil {
+			h.logger.Error("failed to search users", slog.String("error", err.Error()))
+			break
+		}
+
+		b, err := json.Marshal(result)
+		if err != nil {
+			h.logger.Error("failed to marshal result", slog.String("error", err.Error()))
+			break
+		}
+
+		response := []byte("Echo: " + string(b))
+		err = conn.WriteJSON(response)
+		if err != nil {
+			h.logger.Error("failed to write message", slog.String("error", err.Error()))
+			return
+		}
+
+	}
+}
+
+/*p
+
+attern: /v1/users/{id}/block
 method:  POST
 info:    Заблокировать пользователя
 
@@ -66,7 +141,7 @@ failed:
   - status code: 500 Internal Server Error
   - response body: JSON error + time*/
 
-func userBlockHandler(w http.ResponseWriter, r *http.Request) {}
+// func (h *UserHandler) userBlockHandler(w  http.ResponseWriter, r *http.Request) {}
 
 /*pattern: /v1/users/{id}/block
 method:  DELETE
@@ -82,4 +157,4 @@ failed:
   - status code: 500 Internal Server Error
   - response body: JSON error + time*/
 
-func userUnblockHandler(w http.ResponseWriter, r *http.Request) {}
+func (h *UserHandler) userUnblockHandler(w http.ResponseWriter, r *http.Request) {}
