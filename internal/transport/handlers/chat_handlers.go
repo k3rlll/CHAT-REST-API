@@ -12,8 +12,8 @@ import (
 )
 
 type RequestData struct {
-	ChatID int `json:"chat_id"`
-	UserID int `json:"user_id"`
+	ChatID int64 `json:"chat_id"`
+	UserID int64 `json:"user_id"`
 }
 
 type ChatHandler struct {
@@ -58,7 +58,7 @@ failed:
 
 func (h *ChatHandler) CreateChatHandler(w http.ResponseWriter, r *http.Request) {
 
-	var members []int
+	var members []int64
 
 	if err := json.NewDecoder(r.Body).Decode(&members); err != nil {
 		h.logger.Error("failed to decode request", slog.String("error", err.Error()))
@@ -200,7 +200,7 @@ func (h *ChatHandler) OpenChatHandler(w http.ResponseWriter, r *http.Request) {
 //   - response body: JSON error + time
 func (h *ChatHandler) DeleteChatHandler(w http.ResponseWriter, r *http.Request) {
 
-	var chat_id int
+	var chat_id int64
 
 	if err := json.NewDecoder(r.Body).Decode(&chat_id); err != nil {
 		h.logger.Error("failed to decode request", slog.String("error", err.Error()))
@@ -255,9 +255,9 @@ func getListMembersHandler(w http.ResponseWriter, r *http.Request) {}
 
 func (h *ChatHandler) AddMembersHandler(w http.ResponseWriter, r *http.Request) {
 	var requestData struct {
-		ChatID  int   `json:"chat_id"`
-		Members []int `json:"members"`
-		UserID  int   `json:"user_id"`
+		ChatID  int64   `json:"chat_id"`
+		Members []int64 `json:"members"`
+		UserID  int64   `json:"user_id"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {

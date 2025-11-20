@@ -3,7 +3,7 @@ package chat
 import "time"
 
 type Chat struct {
-	Id           int
+	Id           int64
 	Title        string
 	IsPrivate    bool
 	CreatedAt    time.Time

@@ -192,3 +192,4 @@ failed:
   - status code: 500 Internal Server Error
   - response body: JSON error + time
 */
+//TODO: implement logout from all devices

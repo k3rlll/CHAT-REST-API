@@ -11,15 +11,15 @@ import (
 )
 
 var (
-	SearchLimit  = 10
-	SearchOffset = 0
+	SearchLimit  int64 = 10
+	SearchOffset int64 = 0
 )
 
 type UserService struct {
 	Repo     dom.UserRepository
 	Logger   *slog.Logger
 	Timeout  time.Duration
-	MaxLimit int
+	MaxLimit int64
 }
 
 func NewUserService(repo dom.UserRepository, logger *slog.Logger) *UserService {

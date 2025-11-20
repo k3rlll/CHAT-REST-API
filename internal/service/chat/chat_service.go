@@ -23,7 +23,10 @@ func NewChatService(chat dom.ChatRepository, logger *slog.Logger) *ChatService {
 		Logger: logger,
 	}
 }
-func (c *ChatService) CreateChat(ctx context.Context, isPrivate bool, title string, members []int) (dom.Chat, error) {
+func (c *ChatService) CreateChat(ctx context.Context,
+	isPrivate bool,
+	title string,
+	members []int64) (dom.Chat, error) {
 	if title == "" {
 		c.Logger.Info("title is empty", errors.New("title cannot be empty"))
 		return dom.Chat{}, errors.New("title cannot be empty")
@@ -47,7 +50,7 @@ func (c *ChatService) CreateChat(ctx context.Context, isPrivate bool, title stri
 	return chat, nil
 }
 
-func (c *ChatService) DeleteChat(ctx context.Context, chatID int) error {
+func (c *ChatService) DeleteChat(ctx context.Context, chatID int64) error {
 
 	exists, err := c.Chat.CheckIfChatExists(ctx, chatID)
 	if err != nil {
@@ -73,7 +76,7 @@ func (c *ChatService) ListOfChats(ctx context.Context) ([]dom.Chat, error) {
 
 }
 
-func (c *ChatService) GetChatDetails(ctx context.Context, chatID int, userID int) (dom.Chat, error) {
+func (c *ChatService) GetChatDetails(ctx context.Context, chatID int64, userID int64) (dom.Chat, error) {
 
 	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
 	if err != nil {
@@ -92,7 +95,11 @@ func (c *ChatService) GetChatDetails(ctx context.Context, chatID int, userID int
 	return chat, nil
 }
 
-func (c *ChatService) OpenChat(ctx context.Context, chatID int, userID int) (dom.Chat, []domMessage.Message, error) {
+func (c *ChatService) OpenChat(ctx context.Context,
+	chatID int64,
+	userID int64) (dom.Chat,
+	[]domMessage.Message,
+	error) {
 
 	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
 	if err != nil {
@@ -125,7 +132,7 @@ func (c *ChatService) OpenChat(ctx context.Context, chatID int, userID int) (dom
 	return details, messages, nil
 }
 
-func (c *ChatService) AddMembers(ctx context.Context, chatID int, UserID int, members []int) error {
+func (c *ChatService) AddMembers(ctx context.Context, chatID int64, UserID int64, members []int64) error {
 	if c.User.CheckUserExists(ctx, UserID) {
 		c.Logger.Info("user does not exist", nil)
 		return customerrors.ErrUserDoesNotExist

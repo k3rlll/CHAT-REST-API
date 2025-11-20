@@ -21,7 +21,7 @@ func NewChatRepository(pool *pgxpool.Pool, logger *slog.Logger) *ChatRepository 
 	}
 }
 
-func (c *ChatRepository) CheckIsMemberOfChat(ctx context.Context, chatID int, userID int) (bool, error) {
+func (c *ChatRepository) CheckIsMemberOfChat(ctx context.Context, chatID int64, userID int64) (bool, error) {
 	isMember := false
 	err := c.pool.QueryRow(ctx,
 		"SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2)", chatID, userID).Scan(&isMember)
@@ -33,9 +33,9 @@ func (c *ChatRepository) CheckIsMemberOfChat(ctx context.Context, chatID int, us
 
 }
 
-func (c *ChatRepository) CreateChat(ctx context.Context, title string, isPrivate bool, members []int) (int, error) {
+func (c *ChatRepository) CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (int64, error) {
 
-	var chatId int
+	var chatId int64
 	username := ""
 
 	if len(members) == 2 {
@@ -84,13 +84,13 @@ func (c *ChatRepository) CreateChat(ctx context.Context, title string, isPrivate
 
 }
 
-func (c *ChatRepository) DeleteChat(ctx context.Context, chatID int) error {
+func (c *ChatRepository) DeleteChat(ctx context.Context, chatID int64) error {
 	_, err := c.pool.Exec(ctx,
 		"DELETE FROM chats WHERE id=$1", chatID)
 	return err
 }
 
-func (c *ChatRepository) CheckIfChatExists(ctx context.Context, chatID int) (bool, error) {
+func (c *ChatRepository) CheckIfChatExists(ctx context.Context, chatID int64) (bool, error) {
 	exists := false
 	err := c.pool.QueryRow(ctx,
 		"SELECT EXISTS (SELECT 1 FROM chats WHERE id=$1)", chatID).Scan(&exists)
@@ -124,7 +124,7 @@ func (c *ChatRepository) ListOfChats(ctx context.Context) ([]domChat.Chat, error
 
 }
 
-func (c *ChatRepository) GetChatDetails(ctx context.Context, chatID int) (domChat.Chat, error) {
+func (c *ChatRepository) GetChatDetails(ctx context.Context, chatID int64) (domChat.Chat, error) {
 
 	var chat domChat.Chat
 	query := "SELECT id, title, is_private, members FROM chats WHERE id=$1"
@@ -141,7 +141,7 @@ func (c *ChatRepository) GetChatDetails(ctx context.Context, chatID int) (domCha
 	}, nil
 }
 
-func (c *ChatRepository) OpenChat(ctx context.Context, chatID int, userID int) ([]domMessage.Message, error) {
+func (c *ChatRepository) OpenChat(ctx context.Context, chatID int64, userID int64) ([]domMessage.Message, error) {
 
 	rows, err := c.pool.Query(ctx,
 		"SELECT messages.id, messages.chat_id, messages.sender_id, messages.content, messages.created_at "+
@@ -168,7 +168,7 @@ func (c *ChatRepository) OpenChat(ctx context.Context, chatID int, userID int) (
 	return messages, nil
 }
 
-func (c *ChatRepository) AddMembers(ctx context.Context, chatID int, members []int) error {
+func (c *ChatRepository) AddMembers(ctx context.Context, chatID int64, members []int64) error {
 	for _, userID := range members {
 		_, err := c.pool.Exec(ctx,
 			"INSERT INTO chat_members (chat_id, user_id) VALUES ($1, $2)", chatID, userID)
@@ -180,7 +180,7 @@ func (c *ChatRepository) AddMembers(ctx context.Context, chatID int, members []i
 	return nil
 }
 
-func (c *ChatRepository) UserInChat(ctx context.Context, chatID int, userID int) (bool, error) {
+func (c *ChatRepository) UserInChat(ctx context.Context, chatID int64, userID int64) (bool, error) {
 	isMember := false
 	err := c.pool.QueryRow(ctx,
 		"SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2)", chatID, userID).Scan(&isMember)

@@ -24,7 +24,7 @@ func NewMessageRepository(pool *pgxpool.Pool, logger *slog.Logger) *MessageRepos
 // type MessageRepository interface {
 // }
 
-func (m *MessageRepository) CheckMessageExists(ctx context.Context, id int) (bool, error) {
+func (m *MessageRepository) CheckMessageExists(ctx context.Context, id int64) (bool, error) {
 	exists := false
 
 	err := m.pool.QueryRow(ctx,
@@ -36,7 +36,7 @@ func (m *MessageRepository) CheckMessageExists(ctx context.Context, id int) (boo
 	return exists, nil
 }
 
-func (m *MessageRepository) DeleteMessage(ctx context.Context, id int) error {
+func (m *MessageRepository) DeleteMessage(ctx context.Context, id int64) error {
 	_, err := m.pool.Exec(ctx, "DELETE FROM messages WHERE id=$1", id)
 	if err != nil {
 		m.logger.Error("failed to delete a message", err.Error())
@@ -46,8 +46,8 @@ func (m *MessageRepository) DeleteMessage(ctx context.Context, id int) error {
 	return nil
 }
 
-func (m *MessageRepository) Create(ctx context.Context, chatID int, userID int, text string) (dom.Message, error) {
-	var messageID int
+func (m *MessageRepository) Create(ctx context.Context, chatID int64, userID int64, text string) (dom.Message, error) {
+	var messageID int64
 
 	err := m.pool.QueryRow(ctx,
 		"INSERT INTO messages (chat_id, user_id, text) VALUES ($1,$2,$3) RETURNING id", chatID, userID, text).Scan(&messageID)
@@ -67,7 +67,7 @@ func (m *MessageRepository) Create(ctx context.Context, chatID int, userID int, 
 	return res, nil
 }
 
-func (m *MessageRepository) EditMessage(ctx context.Context, messageID int, newText string) error {
+func (m *MessageRepository) EditMessage(ctx context.Context, messageID int64, newText string) error {
 	_, err := m.pool.Exec(ctx,
 		"UPDATE messages SET text=$1 WHERE id=$2", newText, messageID)
 	if err != nil {
@@ -77,13 +77,13 @@ func (m *MessageRepository) EditMessage(ctx context.Context, messageID int, newT
 	return nil
 }
 
-func (m *MessageRepository) ListByChat(ctx context.Context, chatID int64, limit int, offset int) ([]dom.Message, error) {
+// ListByChat отправляет список сообщений для указанного чата с учетом лимита и смещения.
+func (m *MessageRepository) ListByChat(ctx context.Context, chatID int64) ([]dom.Message, error) {
 	rows, err := m.pool.Query(ctx,
 		`SELECT id, chat_id, user_id, text, created_at
 		   FROM messages
 		  WHERE chat_id = $1
-		  ORDER BY created_at DESC
-		  LIMIT $2 OFFSET $3`, chatID, limit, offset)
+		  ORDER BY created_at DESC`, chatID)
 	if err != nil {
 		return nil, err
 	}

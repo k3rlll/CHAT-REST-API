@@ -3,9 +3,9 @@ package message
 import "context"
 
 type MessageRepository interface {
-	CheckMessageExists(ctx context.Context, id int) (bool, error)
-	DeleteMessage(ctx context.Context, id int) error
-	Create(ctx context.Context, chatID int, userID int, text string) (Message, error)
-	EditMessage(ctx context.Context, messageID int, newText string) error
-	ListByChat(ctx context.Context, chatID int64, limit int, offset int) ([]Message, error)
+	CheckMessageExists(ctx context.Context, id int64) (bool, error)
+	DeleteMessage(ctx context.Context, id int64) error
+	Create(ctx context.Context, chatID int64, userID int64, text string) (Message, error)
+	EditMessage(ctx context.Context, messageID int64, newText string) error
+	ListByChat(ctx context.Context, chatID int64) ([]Message, error)
 }

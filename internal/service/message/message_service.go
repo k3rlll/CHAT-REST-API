@@ -22,7 +22,7 @@ func NewMessageService(chat ch.ChatRepository, message msg.MessageRepository, lo
 	}
 }
 
-func (m *MessageService) Send(ctx context.Context, chatID int, userID int, text string) (msg.Message, error) {
+func (m *MessageService) Send(ctx context.Context, chatID int64, userID int64, text string) (msg.Message, error) {
 	isMember, err := m.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
 	if err != nil {
 		m.Logger.Error("failed to check if user is member of chat", err.Error())
@@ -42,7 +42,7 @@ func (m *MessageService) Send(ctx context.Context, chatID int, userID int, text 
 	return message, nil
 }
 
-func (m *MessageService) Delete(ctx context.Context, messageID int) error {
+func (m *MessageService) DeleteMessage(ctx context.Context, messageID int64) error {
 	exists, err := m.Message.CheckMessageExists(ctx, messageID)
 	if err != nil {
 		m.Logger.Error(err.Error())
@@ -62,7 +62,7 @@ func (m *MessageService) Delete(ctx context.Context, messageID int) error {
 
 }
 
-func (m *MessageService) Edit(ctx context.Context, messageID int, newText string) error {
+func (m *MessageService) Edit(ctx context.Context, messageID int64, newText string) error {
 	if newText == "" {
 		m.Logger.Error("new message text is empty")
 		return customerrors.ErrMessageIsEmpty
@@ -84,12 +84,12 @@ func (m *MessageService) Edit(ctx context.Context, messageID int, newText string
 
 }
 
-func (m *MessageService) List(ctx context.Context, chatID int64, limit, offset int) ([]msg.Message, error) {
-	if limit <= 0 || limit > 200 {
-		limit = 50
-	}
-	if offset < 0 {
-		offset = 0
-	}
-	return m.Message.ListByChat(ctx, chatID, limit, offset)
+func (m *MessageService) List(ctx context.Context, chatID int64) ([]msg.Message, error) {
+	// if limit <= 0 || limit > 200 {
+	// 	limit = 50
+	// }
+	// if offset < 0 {
+	// 	offset = 0
+	// }
+	return m.Message.ListByChat(ctx, chatID)
 }

@@ -72,17 +72,6 @@ func userByIDHandler(w http.ResponseWriter, r *http.Request) {}
 pattern: /v1/users
 method:  GET
 info:    Поиск пользователей; параметры: q, limit, cursor
-
-succeed:
-  - status code: 200 OK
-  - response body: JSON { items:[...], next_cursor }
-
-failed:
-  - status code: 400 Bad Request (параметры)
-  - status code: 401 Unauthorized
-  - status code: 429 Too Many Requests
-  - status code: 500 Internal Server Error
-  - response body: JSON error + time
 */
 func (h *UserHandler) usersSearchHandler(w http.ResponseWriter, r *http.Request) {
 	conn, err := h.upgrader.Upgrade(w, r, nil)
@@ -107,7 +96,7 @@ func (h *UserHandler) usersSearchHandler(w http.ResponseWriter, r *http.Request)
 			break
 		}
 
-		b, err := json.Marshal(result)
+		b, err := json.MarshalIndent(result, "", "   ")
 		if err != nil {
 			h.logger.Error("failed to marshal result", slog.String("error", err.Error()))
 			break
@@ -122,39 +111,3 @@ func (h *UserHandler) usersSearchHandler(w http.ResponseWriter, r *http.Request)
 
 	}
 }
-
-/*p
-
-attern: /v1/users/{id}/block
-method:  POST
-info:    Заблокировать пользователя
-
-succeed:
-  - status code: 201 Created
-  - response body: JSON { user_id, blocked:true, blocked_at }
-
-failed:
-  - status code: 400 Bad Request
-  - status code: 401 Unauthorized
-  - status code: 404 Not Found (user)
-  - status code: 409 Conflict (уже заблокирован)
-  - status code: 500 Internal Server Error
-  - response body: JSON error + time*/
-
-// func (h *UserHandler) userBlockHandler(w  http.ResponseWriter, r *http.Request) {}
-
-/*pattern: /v1/users/{id}/block
-method:  DELETE
-info:    Разблокировать пользователя
-
-succeed:
-  - status code: 204 No Content
-  - response body: пусто
-
-failed:
-  - status code: 401 Unauthorized
-  - status code: 404 Not Found (не был заблокирован)
-  - status code: 500 Internal Server Error
-  - response body: JSON error + time*/
-
-func (h *UserHandler) userUnblockHandler(w http.ResponseWriter, r *http.Request) {}

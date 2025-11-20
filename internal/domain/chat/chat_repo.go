@@ -6,13 +6,13 @@ import (
 )
 
 type ChatRepository interface {
-	GetChatDetails(ctx context.Context, chatID int) (Chat, error)
+	GetChatDetails(ctx context.Context, chatID int64) (Chat, error)
 	ListOfChats(ctx context.Context) ([]Chat, error)
-	CheckIfChatExists(ctx context.Context, chatID int) (bool, error)
-	DeleteChat(ctx context.Context, chatID int) error
-	CreateChat(ctx context.Context, name string, isPrivate bool, userIDs []int) (int, error)
-	CheckIsMemberOfChat(ctx context.Context, chatID int, userID int) (bool, error)
-	OpenChat(ctx context.Context, chatID int, userID int) ([]domMessage.Message, error)
-	AddMembers(ctx context.Context, chatID int, members []int) error
-	UserInChat(ctx context.Context, chatID int, userID int) (bool, error)
+	CheckIfChatExists(ctx context.Context, chatID int64) (bool, error)
+	DeleteChat(ctx context.Context, chatID int64) error
+	CreateChat(ctx context.Context, name string, isPrivate bool, userIDs []int64) (int64, error)
+	CheckIsMemberOfChat(ctx context.Context, chatID int64, userID int64) (bool, error)
+	OpenChat(ctx context.Context, chatID int64, userID int64) ([]domMessage.Message, error)
+	AddMembers(ctx context.Context, chatID int64, members []int64) error
+	UserInChat(ctx context.Context, chatID int64, userID int64) (bool, error)
 }
