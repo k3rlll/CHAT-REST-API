@@ -27,7 +27,7 @@ func NewAuthHandler(userSrv *srvUser.UserService, authSrv *srvAuth.AuthService, 
 	}
 }
 
-/*pattern: /v1/auth/registration
+/*pattern: /registration
 method:  POST
 info:    Регистрация нового пользователя
 

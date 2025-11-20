@@ -186,3 +186,5 @@ func (c *ChatRepository) UserInChat(ctx context.Context, chatID int64, userID in
 		"SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2)", chatID, userID).Scan(&isMember)
 	return isMember, err
 }
+
+var _ domChat.ChatRepository = (*ChatRepository)(nil)

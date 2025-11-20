@@ -22,10 +22,18 @@ type Config struct {
 	Database struct {
 		Type     string `yaml:"type"`
 		Host     string `yaml:"host" env:"DB_HOST" env-default:"localhost"`
-		Port     int    `yaml:"port" env:"DB_PORT" env-default:"8081"`
+		Port     int    `yaml:"port" env:"DB_PORT" env-default:"5432"`
 		User     string `yaml:"user" env:"DB_USER" env-default:"postgres"`
 		Password string `yaml:"password" env:"DB_PASSWORD"`
 	} `yaml:"database"`
+}
+
+func (c *Config) DatabaseDSN() string {
+	return "postgres://" +
+		c.Database.User + ":" +
+		c.Database.Password + "@" +
+		c.Database.Host + ":" +
+		string(rune(c.Database.Port)) + "/postgres?sslmode=disable"
 }
 
 func MustLoadConfig() *Config {

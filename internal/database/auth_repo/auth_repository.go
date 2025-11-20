@@ -22,7 +22,9 @@ func NewTokenRepository(pool *pgxpool.Pool, logger *slog.Logger) *TokenRepositor
 	}
 }
 
-func (t *TokenRepository) SaveRefreshToken(ctx context.Context, userID int64, refreshToken string) error {
+func (t *TokenRepository) SaveRefreshToken(ctx context.Context,
+	userID int64,
+	refreshToken string) error {
 
 	_, err := t.pool.Exec(ctx, `
         INSERT INTO refresh_tokens (user_id, refresh_token)
@@ -32,7 +34,10 @@ func (t *TokenRepository) SaveRefreshToken(ctx context.Context, userID int64, re
 	return err
 }
 
-func (t *TokenRepository) Login(ctx context.Context, token *dom.TokenPair, userID int64, password string) (*dom.TokenPair, error) {
+func (t *TokenRepository) Login(ctx context.Context,
+	token *dom.TokenPair,
+	userID int64,
+	password string) (*dom.TokenPair, error) {
 	var passwordHash string
 
 	err := t.pool.QueryRow(ctx,
@@ -55,3 +60,4 @@ func (t *TokenRepository) Login(ctx context.Context, token *dom.TokenPair, userI
 	return token, nil
 }
 
+var _ dom.TokenRepository = (*TokenRepository)(nil)

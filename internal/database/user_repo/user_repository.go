@@ -60,7 +60,7 @@ func (r *UserRepository) RegisterUser(
 	return userRes, nil
 }
 
-func (r *UserRepository) SearchUser(ctx context.Context, q string, limit, offset int) ([]dom.User, error) {
+func (r *UserRepository) SearchUser(ctx context.Context, q string, limit, offset int64) ([]dom.User, error) {
 
 	const sqlq = `
 SELECT id, nickname
@@ -97,7 +97,7 @@ LIMIT $2 OFFSET $3;
 	return out, nil
 }
 
-func (r *UserRepository) CheckUserExists(ctx context.Context, userID int) bool {
+func (r *UserRepository) CheckUserExists(ctx context.Context, userID int64) bool {
 	var exists bool
 	err := r.pool.QueryRow(ctx,
 		"SELECT EXISTS (SELECT 1 FROM users WHERE id=$1)", userID).Scan(&exists)
@@ -106,3 +106,5 @@ func (r *UserRepository) CheckUserExists(ctx context.Context, userID int) bool {
 	}
 	return exists
 }
+
+var _ dom.UserRepository = (*UserRepository)(nil)
