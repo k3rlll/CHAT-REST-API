@@ -18,8 +18,10 @@ import (
 	user "main/internal/database/user_repo"
 	mwLogger "main/internal/server/logger"
 	srvAuth "main/internal/service/auth"
+	srvChat "main/internal/service/chat"
+	srvMessage "main/internal/service/message"
 	srvUser "main/internal/service/user"
-	HTTP "main/internal/transport/handlers"
+	httpHandler "main/internal/transport/handlers"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
@@ -43,18 +45,30 @@ func main() {
 	router := chi.NewRouter()
 
 	dbConn, err := db.NewDBPool(cfg.DatabaseDSN())
+	if err != nil {
+		logger.Error("failed to connect to database", slog.String("error", err.Error()))
+		return
+	}
+	logger.Info("Connected to database successfully")
+
 	authRepo := auth.NewTokenRepository(dbConn, logger)
 	userRepo := user.NewUserRepository(dbConn, logger)
 	chatRepo := chat.NewChatRepository(dbConn, logger)
 	msgRepo := msg.NewMessageRepository(dbConn, logger)
 
-	if err != nil {
-		logger.Error("failed to connect to database", slog.String("error", err.Error()))
-		return
-	}
-	userService := srvUser.NewUserService(&userRepo, logger)
-	authService := srvAuth.NewAuthService(&authRepo, logger)
-	authHandler := HTTP.NewAuthHandler(userService, authService, logger)
+	userService := srvUser.NewUserService(userRepo, logger)
+	authService := srvAuth.NewAuthService(authRepo, logger)
+	chatService := srvChat.NewChatService(userRepo, chatRepo, logger)
+	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, logger)
+
+	userHandler := httpHandler.NewUserHandler(userService, authService, messageService, chatService, logger)
+	authHandler := httpHandler.NewAuthHandler(userService, authService, logger)
+	chatHandler := httpHandler.NewChatHandler(userService, authService, messageService, chatService, logger)
+	messageHandler := httpHandler.NewMessageHandler(userService, authService, messageService, chatService, logger)
+
+	httpHandler.NewHTTPHandler(userHandler, authHandler, chatHandler, messageHandler, logger)
+
+	httpHandler.HTTPHandler.RegisterRoutes()
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)

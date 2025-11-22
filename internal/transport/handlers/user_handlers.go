@@ -2,13 +2,17 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
+	domUser "main/internal/domain/user"
+	"main/internal/pkg/customerrors"
 	srvAuth "main/internal/service/auth"
 	srvChat "main/internal/service/chat"
 	srvMessage "main/internal/service/message"
 	srvUser "main/internal/service/user"
 	"net/http"
 
+	"github.com/go-chi/chi"
 	"github.com/gorilla/websocket"
 )
 
@@ -34,6 +38,11 @@ func NewUserHandler(userSrv *srvUser.UserService,
 		upgrader: websocket.Upgrader{},
 		logger:   logger,
 	}
+}
+
+func (h *UserHandler) RegisterRoutes(r chi.Router) {
+	r.Get("/search", h.usersSearchWS)
+	r.Post("/registration", h.RegisterHandler)
 }
 
 /*pattern: /v1/me
@@ -73,7 +82,7 @@ pattern: /v1/users
 method:  GET
 info:    Поиск пользователей; параметры: q, limit, cursor
 */
-func (h *UserHandler) usersSearchHandler(w http.ResponseWriter, r *http.Request) {
+func (h *UserHandler) usersSearchWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		h.logger.Error("failed to upgrade connection", slog.String("error", err.Error()))
@@ -110,4 +119,40 @@ func (h *UserHandler) usersSearchHandler(w http.ResponseWriter, r *http.Request)
 		}
 
 	}
+}
+
+func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
+
+	var u domUser.User
+
+	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
+		h.logger.Error("failed to decode request", slog.String("error", err.Error()))
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
+	createdUser, err := h.UserSrv.RegisterUser(r.Context(), u.Username, u.Email, u.Password)
+	if err != nil {
+		if errors.Is(err, customerrors.ErrInvalidPassword) {
+			http.Error(w, "Password does not meet complexity requirements", http.StatusUnprocessableEntity)
+			h.logger.Info("invalid password during registration")
+		} else {
+			h.logger.Error("failed to register user", slog.String("error", err.Error()))
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
+		}
+		return
+	}
+
+	b, err := json.MarshalIndent(createdUser, "", "  ")
+	if err != nil {
+		h.logger.Error("failed to marshal response", slog.String("error", err.Error()))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+	if _, err := w.Write(b); err != nil {
+		h.logger.Error("failed to write response", slog.String("error", err.Error()))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
 }

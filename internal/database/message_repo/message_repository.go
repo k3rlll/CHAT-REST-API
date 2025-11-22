@@ -99,3 +99,5 @@ func (m *MessageRepository) ListByChat(ctx context.Context, chatID int64) ([]dom
 	}
 	return out, rows.Err()
 }
+
+var _ dom.MessageRepository = (*MessageRepository)(nil)

@@ -9,6 +9,8 @@ import (
 	srvMessage "main/internal/service/message"
 	srvUser "main/internal/service/user"
 	"net/http"
+
+	"github.com/go-chi/chi"
 )
 
 type RequestData struct {
@@ -38,22 +40,18 @@ func NewChatHandler(userSrv *srvUser.UserService,
 	}
 }
 
+// все пути относительно /chats
+func (h *ChatHandler) RegisterRoutes(r chi.Router) {
+	r.Post("/", h.CreateChatHandler)
+	r.Get("/", h.GetChatsHandler)
+	r.Get("/{id}", h.OpenChatHandler)
+	r.Delete("/{id}", h.DeleteChatHandler)
+	r.Post("/{id}/members", h.AddMembersHandler)
+}
+
 /*pattern: /v1/chats
 method:  POST
 info:    Создать чат: direct (user_id) или group (title)
-
-succeed:
-  - status code: 201 Created
-  - response body: JSON { chat:{ id, type, title?, members:[...] } }
-
-failed:
-  - status code: 400 Bad Request
-  - status code: 401 Unauthorized
-  - status code: 404 Not Found (для direct: user не найден)
-  - status code: 409 Conflict (direct уже существует)
-  - status code: 422 Unprocessable Entity
-  - status code: 500 Internal Server Error
-  - response body: JSON error + time
 */
 
 func (h *ChatHandler) CreateChatHandler(w http.ResponseWriter, r *http.Request) {
@@ -78,17 +76,6 @@ func (h *ChatHandler) CreateChatHandler(w http.ResponseWriter, r *http.Request) 
 // pattern: /v1/chats
 // method:  GET
 // info:    Список чатов пользователя; параметры: cursor, limit, q
-
-// succeed:
-//   - status code: 200 OK
-//   - response body: JSON { items:[{ chat, last_message, pinned, muted }], next_cursor }
-
-// failed:
-//   - status code: 400 Bad Request
-//   - status code: 401 Unauthorized
-//   - status code: 429 Too Many Requests
-//   - status code: 500 Internal Server Error
-//   - response body: JSON error + time
 
 func (h *ChatHandler) GetChatsHandler(w http.ResponseWriter, r *http.Request) {
 	chats, err := h.ChatSrv.ListOfChats(r.Context())
@@ -115,17 +102,6 @@ func (h *ChatHandler) GetChatsHandler(w http.ResponseWriter, r *http.Request) {
 // pattern: /v1/chats/{id}
 // method:  GET
 // info:    Детали чата (если участник)
-
-// succeed:
-//   - status code: 200 OK
-//   - response body: JSON { chat:{...}, members:[...], settings:{ pinned, muted } }
-
-// failed:
-//   - status code: 401 Unauthorized
-//   - status code: 403 Forbidden (не участник)
-//   - status code: 404 Not Found
-//   - status code: 500 Internal Server Error
-//   - response body: JSON error + time
 
 func (h *ChatHandler) OpenChatHandler(w http.ResponseWriter, r *http.Request) {
 
@@ -233,25 +209,11 @@ func (h *ChatHandler) DeleteChatHandler(w http.ResponseWriter, r *http.Request) 
 //   - status code: 500 Internal Server Error
 //   - response body: JSON error + time
 
-func getListMembersHandler(w http.ResponseWriter, r *http.Request) {}
+// func getListMembersHandler(w http.ResponseWriter, r *http.Request) {}
 
 // pattern: /v1/chats/{id}/members
 // method:  POST
 // info:    Добавить участника(ов) в групповой чат
-
-// succeed:
-//   - status code: 201 Created
-//   - response body: JSON { added:[user_id...], chat_id }
-
-// failed:
-//   - status code: 400 Bad Request
-//   - status code: 401 Unauthorized
-//   - status code: 403 Forbidden (нет прав)
-//   - status code: 404 Not Found (chat/user)
-//   - status code: 409 Conflict (уже участник)
-//   - status code: 422 Unprocessable Entity
-//   - status code: 500 Internal Server Error
-//   - response body: JSON error + time
 
 func (h *ChatHandler) AddMembersHandler(w http.ResponseWriter, r *http.Request) {
 	var requestData struct {

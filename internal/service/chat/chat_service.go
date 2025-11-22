@@ -17,8 +17,9 @@ type ChatService struct {
 	Logger *slog.Logger
 }
 
-func NewChatService(chat dom.ChatRepository, logger *slog.Logger) *ChatService {
+func NewChatService(user domUser.UserRepository, chat dom.ChatRepository, logger *slog.Logger) *ChatService {
 	return &ChatService{
+		User:   user,
 		Chat:   chat,
 		Logger: logger,
 	}

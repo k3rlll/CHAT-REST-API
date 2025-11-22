@@ -10,6 +10,7 @@ import (
 	srvUser "main/internal/service/user"
 	"net/http"
 
+	"github.com/go-chi/chi"
 	"github.com/gorilla/websocket"
 )
 
@@ -26,8 +27,8 @@ func NewMessageHandler(userSrv *srvUser.UserService,
 	authSrv *srvAuth.AuthService,
 	messSrv *srvMessage.MessageService,
 	chatSrv *srvChat.ChatService,
-	logger *slog.Logger) *UserHandler {
-	return &UserHandler{
+	logger *slog.Logger) *MessageHandler {
+	return &MessageHandler{
 		UserSrv:  userSrv,
 		AuthSrv:  authSrv,
 		MessSrv:  messSrv,
@@ -35,6 +36,13 @@ func NewMessageHandler(userSrv *srvUser.UserService,
 		upgrader: websocket.Upgrader{},
 		logger:   logger,
 	}
+}
+
+func (h *MessageHandler) RegisterRoutes(r chi.Router) {
+	r.Post("/", h.Send)
+	r.Delete("/{msg_id}", h.DeleteMessageHandler)
+	r.Get("/", h.ListMessageHandlers)
+	r.Put("/{msg_id}", h.EditMessage)
 }
 
 // pattern: /v1/chats/id/messages
@@ -73,7 +81,7 @@ func (h *MessageHandler) Send(w http.ResponseWriter, r *http.Request) {
 // pattern: /v1/chats/id/messages/{msg_id}
 // method:  DELETE
 // info:    Удалить сообщение в чате
-func (h *MessageHandler) Delete(w http.ResponseWriter, r *http.Request) {
+func (h *MessageHandler) DeleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 
 	var MessageID domMess.Message
 
@@ -94,7 +102,7 @@ func (h *MessageHandler) Delete(w http.ResponseWriter, r *http.Request) {
 // pattern: /v1/chats/id/messages/{msg_id}
 // method:  PUT
 // info:    Отредактировать сообщение в чате
-func (h *MessageHandler) Edit(w http.ResponseWriter, r *http.Request) {
+func (h *MessageHandler) EditMessage(w http.ResponseWriter, r *http.Request) {
 	var request domMess.Message
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -113,7 +121,7 @@ func (h *MessageHandler) Edit(w http.ResponseWriter, r *http.Request) {
 // pattern: /v1/chats/id/messages
 // method:  GET
 // info:    Лист сообщений в чате
-func (h *MessageHandler) List(w http.ResponseWriter, r *http.Request) {
+func (h *MessageHandler) ListMessageHandlers(w http.ResponseWriter, r *http.Request) {
 	var chatID domMess.Message
 
 	if err := json.NewDecoder(r.Body).Decode(&chatID); err != nil {
