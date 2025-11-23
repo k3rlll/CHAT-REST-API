@@ -1,4 +1,4 @@
-package cmd
+package main
 
 import (
 	"context"
@@ -49,6 +49,13 @@ func main() {
 		logger.Error("failed to connect to database", slog.String("error", err.Error()))
 		return
 	}
+	defer dbConn.Close()
+
+	if err := dbConn.Ping(context.Background()); err != nil {
+		logger.Error("failed to ping database", slog.String("error", err.Error()))
+		return
+	}
+
 	logger.Info("Connected to database successfully")
 
 	authRepo := auth.NewTokenRepository(dbConn, logger)
@@ -66,9 +73,9 @@ func main() {
 	chatHandler := httpHandler.NewChatHandler(userService, authService, messageService, chatService, logger)
 	messageHandler := httpHandler.NewMessageHandler(userService, authService, messageService, chatService, logger)
 
-	httpHandler.NewHTTPHandler(userHandler, authHandler, chatHandler, messageHandler, logger)
+	HTTP := httpHandler.NewHTTPHandler(userHandler, authHandler, chatHandler, messageHandler, logger)
 
-	httpHandler.HTTPHandler.RegisterRoutes()
+	HTTP.RegisterRoutes(router)
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
@@ -113,9 +120,6 @@ func main() {
 		logger.Error("server shutdown failed", slog.String("error", err.Error()))
 	}
 
-	//TODO:close database connection
-
-	logger.Info("server stopped")
 }
 
 func setupLogger(env string) *slog.Logger {

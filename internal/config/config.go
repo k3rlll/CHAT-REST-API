@@ -58,11 +58,15 @@ func MustLoadPath(configPath string) *Config {
 func fetchConfigPath() string {
 	var res string
 
-	flag.StringVar(&res, "config", "", "Path to config file")
+	flag.StringVar(&res, "config", "", "Path to the config file (e.g. configs/config.yaml)")
 	flag.Parse()
 
-	if res != "" {
+	if res == "" {
 		res = os.Getenv("CONFIG_PATH")
+	}
+
+	if res == "" {
+		panic("config path is not provided")
 	}
 
 	return res

@@ -38,6 +38,7 @@ func NewMessageHandler(userSrv *srvUser.UserService,
 	}
 }
 
+// /chats/{id}/messages
 func (h *MessageHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/", h.Send)
 	r.Delete("/{msg_id}", h.DeleteMessageHandler)
