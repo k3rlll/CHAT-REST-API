@@ -50,7 +50,7 @@ func (m *MessageRepository) Create(ctx context.Context, chatID int64, userID int
 	var messageID int64
 
 	err := m.pool.QueryRow(ctx,
-		"INSERT INTO messages (chat_id, user_id, text) VALUES ($1,$2,$3) RETURNING id", chatID, userID, text).Scan(&messageID)
+		"INSERT INTO messages (chat_id, sender_id, text) VALUES ($1,$2,$3) RETURNING id", chatID, userID, text).Scan(&messageID)
 	if err != nil {
 		m.logger.Error("failed to create message", err.Error())
 		return dom.Message{}, err
@@ -80,7 +80,7 @@ func (m *MessageRepository) EditMessage(ctx context.Context, messageID int64, ne
 // ListByChat отправляет список сообщений для указанного чата с учетом лимита и смещения.
 func (m *MessageRepository) ListByChat(ctx context.Context, chatID int64) ([]dom.Message, error) {
 	rows, err := m.pool.Query(ctx,
-		`SELECT id, chat_id, user_id, text, created_at
+		`SELECT id, chat_id, sender_id, text, created_at
 		   FROM messages
 		  WHERE chat_id = $1
 		  ORDER BY created_at DESC`, chatID)

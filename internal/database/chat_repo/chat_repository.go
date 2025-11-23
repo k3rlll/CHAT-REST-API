@@ -41,7 +41,7 @@ func (c *ChatRepository) CreateChat(ctx context.Context, title string, isPrivate
 	if len(members) == 2 {
 		userID2 := members[1]
 		err := c.pool.QueryRow(ctx,
-			"SELECT username FROM users WHERE id=$1", userID2).Scan(&username)
+			"SELECT nickname FROM users WHERE id=$1", userID2).Scan(&username)
 		if err != nil {
 			c.logger.Error("failed to get username by id", err.Error())
 			return 0, err
@@ -60,7 +60,7 @@ func (c *ChatRepository) CreateChat(ctx context.Context, title string, isPrivate
 	defer tx.Rollback(ctx)
 
 	err = tx.QueryRow(ctx,
-		"INSERT INTO chats (name, is_private) VALUES ($1, $2) RETURNING id", title, isPrivate).Scan(&chatId)
+		"INSERT INTO chats (title, is_private) VALUES ($1, $2) RETURNING id", title, isPrivate).Scan(&chatId)
 	if err != nil {
 		c.logger.Error("failed to create a chat", err.Error())
 		return 0, err
@@ -144,7 +144,7 @@ func (c *ChatRepository) GetChatDetails(ctx context.Context, chatID int64) (domC
 func (c *ChatRepository) OpenChat(ctx context.Context, chatID int64, userID int64) ([]domMessage.Message, error) {
 
 	rows, err := c.pool.Query(ctx,
-		"SELECT messages.id, messages.chat_id, messages.sender_id, messages.content, messages.created_at "+
+		"SELECT messages.id, messages.chat_id, messages.sender_id, messages.text, messages.created_at "+
 			"FROM messages "+
 			"JOIN chat_members ON messages.chat_id = chat_members.chat_id "+
 			"WHERE chat_members.user_id = $1 AND messages.chat_id = $2 "+

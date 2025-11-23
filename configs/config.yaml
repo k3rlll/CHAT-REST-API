@@ -10,9 +10,10 @@ server:
 database:
   type: "postgres"
   host: "localhost"
-  port: 8081
-  user: postgres
-  password: "1234"
+  port: 5432
+  name: "postgres"
+  user: "postgres"
+  password: "252566"
 
 logging:
   level: info

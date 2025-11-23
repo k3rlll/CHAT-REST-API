@@ -3,6 +3,7 @@ package config
 import (
 	"flag"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
@@ -33,7 +34,7 @@ func (c *Config) DatabaseDSN() string {
 		c.Database.User + ":" +
 		c.Database.Password + "@" +
 		c.Database.Host + ":" +
-		string(rune(c.Database.Port)) + "/postgres?sslmode=disable"
+		strconv.Itoa(c.Database.Port) + "/postgres?sslmode=disable"
 }
 
 func MustLoadConfig() *Config {

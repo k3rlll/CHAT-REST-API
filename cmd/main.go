@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -40,7 +41,7 @@ func main() {
 	logger := setupLogger(cfg.Env)
 
 	logger.Info("Starting application", slog.String("env", cfg.Env))
-	addr := net.JoinHostPort(cfg.Server.Host, string(cfg.Server.Port))
+	addr := net.JoinHostPort(cfg.Server.Host, strconv.Itoa(cfg.Server.Port))
 
 	router := chi.NewRouter()
 
@@ -57,6 +58,20 @@ func main() {
 	}
 
 	logger.Info("Connected to database successfully")
+
+	router.Use(middleware.RequestID)
+	router.Use(mwLogger.New(logger))
+	router.Use(middleware.Recoverer)
+	router.Use(middleware.URLFormat)
+	router.Use(mwLogger.JWTAuth)
+	router.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http.frontend.com", "http://localhost:8082"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: true,
+		MaxAge:           300,
+	}))
 
 	authRepo := auth.NewTokenRepository(dbConn, logger)
 	userRepo := user.NewUserRepository(dbConn, logger)
@@ -87,20 +102,6 @@ func main() {
 		WriteTimeout: cfg.Server.Timeout,
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
-
-	router.Use(middleware.RequestID)
-	router.Use(mwLogger.New(logger))
-	router.Use(middleware.Recoverer)
-	router.Use(middleware.URLFormat)
-	router.Use(mwLogger.JWTAuth)
-	router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"http.frontend.com", "http://localhost:8082"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-type", "X-CSRF-Token"},
-		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: true,
-		MaxAge:           300,
-	}))
 
 	go func() {
 		if err := serverParams.ListenAndServe(); err != nil {
