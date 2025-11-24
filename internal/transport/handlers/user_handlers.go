@@ -101,33 +101,31 @@ func (h *UserHandler) usersSearchWS(w http.ResponseWriter, r *http.Request) {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
 			h.logger.Error("failed to read message", slog.String("error", err.Error()))
-			http.Error(w, "Failed to read message", http.StatusInternalServerError)
-			break
+			return
 		}
 		h.logger.Info("received message", slog.String("message", string(message)))
 
 		result, err := h.UserSrv.SearchUser(r.Context(), string(message))
 		if err != nil {
 			h.logger.Error("failed to search users", slog.String("error", err.Error()))
-			http.Error(w, "Failed to search users", http.StatusInternalServerError)
-			break
+			return
 		}
 
 		b, err := json.MarshalIndent(result, "", "   ")
 		if err != nil {
 			h.logger.Error("failed to marshal result", slog.String("error", err.Error()))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			break
-		}
-
-		response := []byte("Echo: " + string(b))
-		err = conn.WriteJSON(response)
-		if err != nil {
-			h.logger.Error("failed to write message", slog.String("error", err.Error()))
-			http.Error(w, "Failed to write message", http.StatusInternalServerError)
 			return
 		}
 
+		response := map[string]interface{}{
+			"echo": string(b),
+		}
+
+		err = conn.WriteJSON(response) // Используем WriteJSON для отправки данных в формате JSON
+		if err != nil {
+			h.logger.Error("failed to write message", slog.String("error", err.Error()))
+			return // Завершаем соединение при ошибке
+		}
 	}
 }
 

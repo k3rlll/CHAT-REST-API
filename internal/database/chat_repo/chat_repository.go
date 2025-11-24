@@ -46,10 +46,9 @@ func (c *ChatRepository) CreateChat(ctx context.Context, title string, isPrivate
 			c.logger.Error("failed to get username by id", err.Error())
 			return 0, err
 		}
-	}
-
-	if username != "" {
-		title = username
+		if username != "" {
+			title = username
+		}
 	}
 
 	tx, err := c.pool.Begin(ctx)

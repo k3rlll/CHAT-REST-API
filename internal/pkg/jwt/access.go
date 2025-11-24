@@ -13,7 +13,7 @@ type Claims struct {
 }
 
 func GenerateJWT(userID int64) (*dom.TokenPair, error) {
-	accessExpiration := time.Now().Add(15 * time.Minute)
+	accessExpiration := time.Now().Add(15 * time.Hour)
 	accessClaims := &Claims{
 		UserID: userID,
 		RegisteredClaims: jwt.RegisteredClaims{

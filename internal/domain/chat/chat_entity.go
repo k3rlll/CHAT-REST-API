@@ -3,10 +3,11 @@ package chat
 import "time"
 
 type Chat struct {
-	Id           int64
-	Title        string
-	IsPrivate    bool
-	CreatedAt    time.Time
-	Members      []string
-	MembersCount int
+	Id           int64     `json:"chat_id" `
+	Title        string    `json:"title"`
+	IsPrivate    bool      `json:"is_private"`
+	CreatedAt    time.Time `json:"created_at"`
+	Members      []string  `json:"members"`
+	MembersID    []int64   `json:"members_id"`
+	MembersCount int       `json:"members_count"`
 }
