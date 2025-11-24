@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"main/internal/pkg/customerrors"
+	mwLogger "main/internal/server/logger"
 	srvAuth "main/internal/service/auth"
 	srvChat "main/internal/service/chat"
 	srvMessage "main/internal/service/message"
@@ -42,11 +43,14 @@ func NewChatHandler(userSrv *srvUser.UserService,
 
 // все пути относительно /chats
 func (h *ChatHandler) RegisterRoutes(r chi.Router) {
-	r.Post("/", h.CreateChatHandler)
-	r.Get("/", h.GetChatsHandler)
-	r.Get("/{id}", h.OpenChatHandler)
-	r.Delete("/{id}", h.DeleteChatHandler)
-	r.Post("/{id}/members", h.AddMembersHandler)
+	r.Group(func(r chi.Router) {
+		r.Use(mwLogger.JWTAuth)
+		r.Post("/", h.CreateChatHandler)
+		r.Get("/", h.GetChatsHandler)
+		r.Get("/{id}", h.OpenChatHandler)
+		r.Delete("/{id}", h.DeleteChatHandler)
+		r.Post("/{id}/members", h.AddMembersHandler)
+	})
 }
 
 /*pattern: /v1/chats

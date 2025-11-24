@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	domUser "main/internal/domain/user"
 	"main/internal/pkg/customerrors"
+	mwLogger "main/internal/server/logger"
 	srvAuth "main/internal/service/auth"
 	srvChat "main/internal/service/chat"
 	srvMessage "main/internal/service/message"
@@ -41,8 +42,13 @@ func NewUserHandler(userSrv *srvUser.UserService,
 }
 
 func (h *UserHandler) RegisterRoutes(r chi.Router) {
-	r.Get("/search", h.usersSearchWS)
+
 	r.Post("/registration", h.RegisterHandler)
+
+	r.Group(func(r chi.Router) {
+		r.Use(mwLogger.JWTAuth)
+		r.Get("/search", h.usersSearchWS)
+	})
 }
 
 /*pattern: /v1/me
@@ -95,6 +101,7 @@ func (h *UserHandler) usersSearchWS(w http.ResponseWriter, r *http.Request) {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
 			h.logger.Error("failed to read message", slog.String("error", err.Error()))
+			http.Error(w, "Failed to read message", http.StatusInternalServerError)
 			break
 		}
 		h.logger.Info("received message", slog.String("message", string(message)))
@@ -102,12 +109,14 @@ func (h *UserHandler) usersSearchWS(w http.ResponseWriter, r *http.Request) {
 		result, err := h.UserSrv.SearchUser(r.Context(), string(message))
 		if err != nil {
 			h.logger.Error("failed to search users", slog.String("error", err.Error()))
+			http.Error(w, "Failed to search users", http.StatusInternalServerError)
 			break
 		}
 
 		b, err := json.MarshalIndent(result, "", "   ")
 		if err != nil {
 			h.logger.Error("failed to marshal result", slog.String("error", err.Error()))
+			http.Error(w, "Internal server error", http.StatusInternalServerError)
 			break
 		}
 
@@ -115,6 +124,7 @@ func (h *UserHandler) usersSearchWS(w http.ResponseWriter, r *http.Request) {
 		err = conn.WriteJSON(response)
 		if err != nil {
 			h.logger.Error("failed to write message", slog.String("error", err.Error()))
+			http.Error(w, "Failed to write message", http.StatusInternalServerError)
 			return
 		}
 

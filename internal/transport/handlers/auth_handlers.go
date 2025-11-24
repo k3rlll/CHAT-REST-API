@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	domUser "main/internal/domain/user"
 	"main/internal/pkg/customerrors"
+	mwLogger "main/internal/server/logger"
 	srvAuth "main/internal/service/auth"
 	srvUser "main/internal/service/user"
 	"net/http"
@@ -32,7 +33,11 @@ func NewAuthHandler(userSrv *srvUser.UserService, authSrv *srvAuth.AuthService, 
 func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 	// все пути относительно /auth
 	r.Post("/login", h.LoginHandler)
-	r.Post("/logout", h.LogoutHandler)
+
+	r.Group(func(r chi.Router) {
+		r.Use(mwLogger.JWTAuth)
+		r.Post("/logout", h.LogoutHandler)
+	})
 }
 
 /*pattern: /v1/auth/login

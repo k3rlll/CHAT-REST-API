@@ -42,7 +42,7 @@ func (r *UserRepository) RegisterUser(
 	}
 
 	tag, err := r.pool.Exec(ctx,
-		"INSERT INTO users (username, email, password_hash) VALUES ($1, $2, $3)",
+		"INSERT INTO users (nickname, email, password_hash) VALUES ($1, $2, $3)",
 		username, email, passwordHash)
 	if err != nil {
 		r.logger.Error("failed to insert new user", err.Error())

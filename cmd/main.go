@@ -63,7 +63,6 @@ func main() {
 	router.Use(mwLogger.New(logger))
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
-	router.Use(mwLogger.JWTAuth)
 	router.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"http.frontend.com", "http://localhost:8082"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},

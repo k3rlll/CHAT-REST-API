@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	domMess "main/internal/domain/message"
+	mwLogger "main/internal/server/logger"
 	srvAuth "main/internal/service/auth"
 	srvChat "main/internal/service/chat"
 	srvMessage "main/internal/service/message"
@@ -40,10 +41,14 @@ func NewMessageHandler(userSrv *srvUser.UserService,
 
 // /chats/{id}/messages
 func (h *MessageHandler) RegisterRoutes(r chi.Router) {
-	r.Post("/", h.Send)
-	r.Delete("/{msg_id}", h.DeleteMessageHandler)
-	r.Get("/", h.ListMessageHandlers)
-	r.Put("/{msg_id}", h.EditMessage)
+
+	r.Group(func(r chi.Router) {
+		r.Use(mwLogger.JWTAuth)
+		r.Post("/", h.Send)
+		r.Delete("/{msg_id}", h.DeleteMessageHandler)
+		r.Get("/", h.ListMessageHandlers)
+		r.Put("/{msg_id}", h.EditMessage)
+	})
 }
 
 // pattern: /v1/chats/id/messages
