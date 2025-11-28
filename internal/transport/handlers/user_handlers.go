@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	domUser "main/internal/domain/user"
 	"main/internal/pkg/customerrors"
-	mwLogger "main/internal/server/logger"
 	srvAuth "main/internal/service/auth"
 	srvChat "main/internal/service/chat"
 	srvMessage "main/internal/service/message"
@@ -30,6 +29,7 @@ func NewUserHandler(userSrv *srvUser.UserService,
 	authSrv *srvAuth.AuthService,
 	messSrv *srvMessage.MessageService,
 	chatSrv *srvChat.ChatService,
+	upgrader websocket.Upgrader,
 	logger *slog.Logger) *UserHandler {
 	return &UserHandler{
 		UserSrv:  userSrv,
@@ -44,11 +44,12 @@ func NewUserHandler(userSrv *srvUser.UserService,
 func (h *UserHandler) RegisterRoutes(r chi.Router) {
 
 	r.Post("/registration", h.RegisterHandler)
+	r.Get("/search", h.usersSearchWS)
 
-	r.Group(func(r chi.Router) {
-		r.Use(mwLogger.JWTAuth)
-		r.Get("/search", h.usersSearchWS)
-	})
+	// r.Group(func(r chi.Router) {
+	// 	r.Use(mwLogger.JWTAuth)
+	// 	r.Get("/search", h.usersSearchWS)
+	// })
 }
 
 /*pattern: /v1/me

@@ -68,22 +68,10 @@ func (s *UserService) SearchUser(ctx context.Context, message string) ([]dom.Use
 		return []dom.User{}, customerrors.ErrEmptyQuery
 	}
 
-	limit := SearchLimit
-	if limit <= 0 {
-		limit = 10
-	}
-	if limit > s.MaxLimit {
-		limit = s.MaxLimit
-	}
-	offset := SearchOffset
-	if offset < 0 {
-		offset = 0
-	}
-
 	ctx, cancel := context.WithTimeout(ctx, s.Timeout)
 	defer cancel()
 
-	users, err := s.Repo.SearchUser(ctx, q, limit, offset)
+	users, err := s.Repo.SearchUser(ctx, q)
 	if err != nil {
 		s.Logger.Error("failed to search users", err.Error())
 		return []dom.User{}, err

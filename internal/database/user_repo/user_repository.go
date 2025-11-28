@@ -60,7 +60,7 @@ func (r *UserRepository) RegisterUser(
 	return userRes, nil
 }
 
-func (r *UserRepository) SearchUser(ctx context.Context, q string, limit, offset int64) ([]dom.User, error) {
+func (r *UserRepository) SearchUser(ctx context.Context, q string) ([]dom.User, error) {
 
 	const sqlq = `
 SELECT id, nickname
@@ -73,10 +73,8 @@ WHERE
 ORDER BY
    (CAST(id AS TEXT) = $1) DESC,
    (nickname = $1) DESC,
-   id
-LIMIT $2 OFFSET $3;
-`
-	rows, err := r.pool.Query(ctx, sqlq, q, limit, offset)
+   id;`
+	rows, err := r.pool.Query(ctx, sqlq, q)
 	if err != nil {
 		return nil, err
 	}

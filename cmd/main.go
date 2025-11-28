@@ -27,6 +27,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -57,6 +58,24 @@ func main() {
 		return
 	}
 
+	authRepo := auth.NewTokenRepository(dbConn, logger)
+	userRepo := user.NewUserRepository(dbConn, logger)
+	chatRepo := chat.NewChatRepository(dbConn, logger)
+	msgRepo := msg.NewMessageRepository(dbConn, logger)
+
+	userService := srvUser.NewUserService(userRepo, logger)
+	authService := srvAuth.NewAuthService(authRepo, logger)
+	chatService := srvChat.NewChatService(userRepo, chatRepo, logger)
+	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, logger)
+
+	upgrader := websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+
 	logger.Info("Connected to database successfully")
 
 	router.Use(middleware.RequestID)
@@ -72,17 +91,7 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	authRepo := auth.NewTokenRepository(dbConn, logger)
-	userRepo := user.NewUserRepository(dbConn, logger)
-	chatRepo := chat.NewChatRepository(dbConn, logger)
-	msgRepo := msg.NewMessageRepository(dbConn, logger)
-
-	userService := srvUser.NewUserService(userRepo, logger)
-	authService := srvAuth.NewAuthService(authRepo, logger)
-	chatService := srvChat.NewChatService(userRepo, chatRepo, logger)
-	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, logger)
-
-	userHandler := httpHandler.NewUserHandler(userService, authService, messageService, chatService, logger)
+	userHandler := httpHandler.NewUserHandler(userService, authService, messageService, chatService, upgrader, logger)
 	authHandler := httpHandler.NewAuthHandler(userService, authService, logger)
 	chatHandler := httpHandler.NewChatHandler(userService, authService, messageService, chatService, logger)
 	messageHandler := httpHandler.NewMessageHandler(userService, authService, messageService, chatService, logger)

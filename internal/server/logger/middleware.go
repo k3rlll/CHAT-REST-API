@@ -3,6 +3,7 @@ package logger
 import (
 	"context"
 	"log/slog"
+	tk "main/internal/pkg/jwt"
 	"net/http"
 	"strings"
 	"time"
@@ -44,6 +45,30 @@ func New(log *slog.Logger) func(next http.Handler) http.Handler {
 
 func JWTAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		if strings.EqualFold(r.Header.Get("Connection"), "Upgrade") &&
+			strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+
+			c, err := r.Cookie("access_token")
+			if err != nil {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			tokenString := c.Value
+
+			// тут твоя логика валидации JWT
+			userID, err := tk.ValidateJWT(tokenString)
+			if err != nil {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), "userID", userID)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
 		authHeader := r.Header.Get("Authorization")
 
 		if authHeader == "" {
