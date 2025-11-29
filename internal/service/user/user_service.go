@@ -29,7 +29,7 @@ func NewUserService(repo dom.UserRepository, logger *slog.Logger) *UserService {
 	return &UserService{
 		Repo:     repo,
 		Logger:   logger,
-		Timeout:  3 * time.Second,
+		Timeout:  3 * time.Hour,
 		MaxLimit: 100,
 	}
 }
@@ -55,7 +55,7 @@ func (s *UserService) RegisterUser(ctx context.Context, username, email, passwor
 
 	res = dom.User{
 		ID:       res.ID,
-		Username: res.Username,
+		Nickname: res.Nickname,
 		Email:    res.Email,
 	}
 	return res, nil
@@ -65,6 +65,7 @@ func (s *UserService) RegisterUser(ctx context.Context, username, email, passwor
 func (s *UserService) SearchUser(ctx context.Context, message string) ([]dom.User, error) {
 	q := strings.TrimSpace(message)
 	if q == "" {
+		s.Logger.Error("empty search query", slog.String("query", q))
 		return []dom.User{}, customerrors.ErrEmptyQuery
 	}
 
@@ -74,8 +75,11 @@ func (s *UserService) SearchUser(ctx context.Context, message string) ([]dom.Use
 	users, err := s.Repo.SearchUser(ctx, q)
 	if err != nil {
 		s.Logger.Error("failed to search users", err.Error())
+		s.Logger.Info("service", "UserService.SearchUser")
 		return []dom.User{}, err
 	}
+	s.Logger.Info("users search results retrieved successfully", slog.Int("count", len(users)),
+		slog.String("service", "UserService.SearchUser"))
 
 	return users, nil
 

@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"log/slog"
+	dom "main/internal/domain/chat"
 	"main/internal/pkg/customerrors"
 	mwLogger "main/internal/server/logger"
 	srvAuth "main/internal/service/auth"
@@ -13,11 +14,6 @@ import (
 
 	"github.com/go-chi/chi"
 )
-
-type RequestData struct {
-	ChatID int64 `json:"chat_id"`
-	UserID int64 `json:"user_id"`
-}
 
 type ChatHandler struct {
 	UserSrv *srvUser.UserService
@@ -60,15 +56,17 @@ info:    Создать чат: direct (user_id) или group (title)
 
 func (h *ChatHandler) CreateChatHandler(w http.ResponseWriter, r *http.Request) {
 
-	var members []int64
-
-	if err := json.NewDecoder(r.Body).Decode(&members); err != nil {
+	var chat dom.Chat
+	
+	if err := json.NewDecoder(r.Body).Decode(&chat); err != nil {
 		h.logger.Error("failed to decode request", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	_, err := h.ChatSrv.CreateChat(r.Context(), false, "title", members)
+	members := chat.MembersID
+	title := chat.Title
+	_, err := h.ChatSrv.CreateChat(r.Context(), false, title, members)
 	if err != nil {
 		h.logger.Error("failed to create chat", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -109,14 +107,14 @@ func (h *ChatHandler) GetChatsHandler(w http.ResponseWriter, r *http.Request) {
 
 func (h *ChatHandler) OpenChatHandler(w http.ResponseWriter, r *http.Request) {
 
-	var requestData RequestData
+	var requestData map[string]int64
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
 		h.logger.Error("failed to decode request", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	chatID := requestData.ChatID
-	userID := requestData.UserID
+	chatID := requestData["chat_id"]
+	userID := requestData["user_id"]
 
 	details, messages, err := h.ChatSrv.OpenChat(r.Context(), chatID, userID)
 	if err != nil {

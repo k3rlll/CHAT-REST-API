@@ -61,36 +61,34 @@ func (r *UserRepository) RegisterUser(
 }
 
 func (r *UserRepository) SearchUser(ctx context.Context, q string) ([]dom.User, error) {
+	r.logger.Info("searching users with query", slog.String("query", q))
 
-	const sqlq = `
-SELECT id, nickname
-FROM users
-WHERE
-      email = $1
-   OR CAST(id AS TEXT) = $1
-   OR nickname = $1
-   OR nickname ILIKE '%' || $1 || '%'
-ORDER BY
-   (CAST(id AS TEXT) = $1) DESC,
-   (nickname = $1) DESC,
-   id;`
+	const sqlq = `SELECT id, nickname
+		FROM users
+		WHERE nickname = $1`
 	rows, err := r.pool.Query(ctx, sqlq, q)
 	if err != nil {
 		return nil, err
 	}
+	r.logger.Info("query executed successfully", slog.String("rows", rows.CommandTag().String()))
 	defer rows.Close()
 
 	var out []dom.User
+
 	for rows.Next() {
 		var u dom.User
-		if err := rows.Scan(&u.ID, &u.Username); err != nil {
+		if err := rows.Scan(&u.ID, &u.Nickname); err != nil {
+			r.logger.Error("error occurred during rows scanning", slog.String("error", err.Error()))
 			return nil, err
 		}
 		out = append(out, u)
 	}
+	r.logger.Info("rows iteration completed successfully", slog.Int("count", len(out)))
 	if err := rows.Err(); err != nil {
+		r.logger.Error("error occurred during rows iteration", slog.String("error", err.Error()))
 		return nil, err
 	}
+	r.logger.Info("users search results retrieved successfully", slog.Int("count", len(out)))
 
 	return out, nil
 }
@@ -100,6 +98,7 @@ func (r *UserRepository) CheckUserExists(ctx context.Context, userID int64) bool
 	err := r.pool.QueryRow(ctx,
 		"SELECT EXISTS (SELECT 1 FROM users WHERE id=$1)", userID).Scan(&exists)
 	if err != nil {
+		r.logger.Error("error occurred during user existence check", slog.String("error", err.Error()))
 		return false
 	}
 	return exists

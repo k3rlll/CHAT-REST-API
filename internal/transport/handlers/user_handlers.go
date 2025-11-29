@@ -11,6 +11,7 @@ import (
 	srvMessage "main/internal/service/message"
 	srvUser "main/internal/service/user"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi"
 	"github.com/gorilla/websocket"
@@ -52,47 +53,11 @@ func (h *UserHandler) RegisterRoutes(r chi.Router) {
 	// })
 }
 
-/*pattern: /v1/me
-method:  GET
-info:    Получить профиль текущего пользователя
-
-succeed:
-  - status code: 200 OK
-  - response body: JSON { id, username, email?, avatar, ... }
-
-failed:
-  - status code: 401 Unauthorized
-  - status code: 500 Internal Server Error
-  - response body: JSON error + time*/
-
-func meHandler(w http.ResponseWriter, r *http.Request) {}
-
-/*pattern: /v1/users/{id}
-method:  GET
-info:    Публичный профиль пользователя по ID
-
-succeed:
-  - status code: 200 OK
-  - response body: JSON { id, username, avatar, status, ... }
-
-failed:
-  - status code: 400 Bad Request
-  - status code: 403 Forbidden (вы заблокированы друг у друга — по политике)
-  - status code: 404 Not Found
-  - status code: 500 Internal Server Error
-  - response body: JSON error + time*/
-
-func userByIDHandler(w http.ResponseWriter, r *http.Request) {}
-
-/*
-pattern: /v1/users
-method:  GET
-info:    Поиск пользователей; параметры: q, limit, cursor
-*/
 func (h *UserHandler) usersSearchWS(w http.ResponseWriter, r *http.Request) {
 	conn, err := h.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		h.logger.Error("failed to upgrade connection", slog.String("error", err.Error()))
+		h.logger.Info("handler", slog.String("handler", "usersSearchWS"))
 		http.Error(w, "Failed to upgrade connection", http.StatusInternalServerError)
 		return
 	}
@@ -102,33 +67,42 @@ func (h *UserHandler) usersSearchWS(w http.ResponseWriter, r *http.Request) {
 		_, message, err := conn.ReadMessage()
 		if err != nil {
 			h.logger.Error("failed to read message", slog.String("error", err.Error()))
-			http.Error(w, "Failed to read message", http.StatusInternalServerError)
-			break
+			return
 		}
 		h.logger.Info("received message", slog.String("message", string(message)))
 
 		result, err := h.UserSrv.SearchUser(r.Context(), string(message))
 		if err != nil {
 			h.logger.Error("failed to search users", slog.String("error", err.Error()))
-			http.Error(w, "Failed to search users", http.StatusInternalServerError)
-			break
+			return
+		}
+		if len(result) > 0 {
+			h.logger.Info("users search results retrieved successfully",
+				slog.Int("count", len(result)),
+				slog.String("first_user_username", result[0].Nickname),
+				slog.String("first_user_id", strconv.Itoa(int(result[0].ID))),
+				slog.String("handler", "usersSearchWS"))
+		} else {
+			h.logger.Info("no users found", slog.String("handler", "usersSearchWS"))
 		}
 
 		b, err := json.MarshalIndent(result, "", "   ")
 		if err != nil {
 			h.logger.Error("failed to marshal result", slog.String("error", err.Error()))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			break
-		}
-
-		response := []byte("Echo: " + string(b))
-		err = conn.WriteJSON(response)
-		if err != nil {
-			h.logger.Error("failed to write message", slog.String("error", err.Error()))
-			http.Error(w, "Failed to write message", http.StatusInternalServerError)
 			return
 		}
+		h.logger.Info("marshaled search result", slog.String("result", string(b)))
 
+		response := map[string]interface{}{
+			"echo": string(b),
+		}
+		h.logger.Info("sending response", slog.String("response", string(b)))
+
+		err = conn.WriteJSON(response) // Используем WriteJSON для отправки данных в формате JSON
+		if err != nil {
+			h.logger.Error("failed to write message", slog.String("error", err.Error()))
+			return // Завершаем соединение при ошибке
+		}
 	}
 }
 
@@ -141,7 +115,7 @@ func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-	createdUser, err := h.UserSrv.RegisterUser(r.Context(), u.Username, u.Email, u.Password)
+	createdUser, err := h.UserSrv.RegisterUser(r.Context(), u.Nickname, u.Email, u.Password)
 	if err != nil {
 		if errors.Is(err, customerrors.ErrInvalidPassword) {
 			http.Error(w, "Password does not meet complexity requirements", http.StatusUnprocessableEntity)
