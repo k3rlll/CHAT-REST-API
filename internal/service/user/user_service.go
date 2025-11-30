@@ -34,7 +34,7 @@ func NewUserService(repo dom.UserRepository, logger *slog.Logger) *UserService {
 	}
 }
 
-func (s *UserService) RegisterUser(ctx context.Context, username, email, password string) (dom.User, error) {
+func (s *UserService) RegisterUser(ctx context.Context, username, nickname, email, password string) (dom.User, error) {
 
 	if !utils.ValidatePassword(password) {
 		s.Logger.Error("password does not meet complexity requirements")
@@ -47,16 +47,16 @@ func (s *UserService) RegisterUser(ctx context.Context, username, email, passwor
 		return dom.User{}, err
 	}
 
-	res, err := s.Repo.RegisterUser(ctx, username, email, passwordHash)
+	res, err := s.Repo.RegisterUser(ctx, username, nickname, email, passwordHash)
 	if err != nil {
 		s.Logger.Error("failed to register user", err.Error())
 		return dom.User{}, err
 	}
 
 	res = dom.User{
-		ID:       res.ID,
-		Nickname: res.Nickname,
-		Email:    res.Email,
+		Username: username,
+		Nickname: nickname,
+		Email:    email,
 	}
 	return res, nil
 
@@ -68,9 +68,6 @@ func (s *UserService) SearchUser(ctx context.Context, message string) ([]dom.Use
 		s.Logger.Error("empty search query", slog.String("query", q))
 		return []dom.User{}, customerrors.ErrEmptyQuery
 	}
-
-	ctx, cancel := context.WithTimeout(ctx, s.Timeout)
-	defer cancel()
 
 	users, err := s.Repo.SearchUser(ctx, q)
 	if err != nil {

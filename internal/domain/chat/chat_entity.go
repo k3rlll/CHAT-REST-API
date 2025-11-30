@@ -8,6 +8,5 @@ type Chat struct {
 	IsPrivate    bool      `json:"is_private"`
 	CreatedAt    time.Time `json:"created_at"`
 	Members      []string  `json:"members"`
-	MembersID    []int64   `json:"members_id"`
 	MembersCount int       `json:"members_count"`
 }

@@ -11,7 +11,6 @@ import (
 	srvMessage "main/internal/service/message"
 	srvUser "main/internal/service/user"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi"
 	"github.com/gorilla/websocket"
@@ -71,7 +70,14 @@ func (h *UserHandler) usersSearchWS(w http.ResponseWriter, r *http.Request) {
 		}
 		h.logger.Info("received message", slog.String("message", string(message)))
 
-		result, err := h.UserSrv.SearchUser(r.Context(), string(message))
+		var req string
+
+		if err := json.Unmarshal(message, &req); err != nil {
+			h.logger.Error("failed to unmarshal message", slog.String("error", err.Error()))
+			return
+		}
+
+		result, err := h.UserSrv.SearchUser(r.Context(), req)
 		if err != nil {
 			h.logger.Error("failed to search users", slog.String("error", err.Error()))
 			return
@@ -80,28 +86,15 @@ func (h *UserHandler) usersSearchWS(w http.ResponseWriter, r *http.Request) {
 			h.logger.Info("users search results retrieved successfully",
 				slog.Int("count", len(result)),
 				slog.String("first_user_username", result[0].Nickname),
-				slog.String("first_user_id", strconv.Itoa(int(result[0].ID))),
-				slog.String("handler", "usersSearchWS"))
+				slog.String("first_user_id", result[0].Username))
 		} else {
 			h.logger.Info("no users found", slog.String("handler", "usersSearchWS"))
 		}
 
-		b, err := json.MarshalIndent(result, "", "   ")
-		if err != nil {
-			h.logger.Error("failed to marshal result", slog.String("error", err.Error()))
-			return
-		}
-		h.logger.Info("marshaled search result", slog.String("result", string(b)))
-
-		response := map[string]interface{}{
-			"echo": string(b),
-		}
-		h.logger.Info("sending response", slog.String("response", string(b)))
-
-		err = conn.WriteJSON(response) // Используем WriteJSON для отправки данных в формате JSON
+		err = conn.WriteJSON(result)
 		if err != nil {
 			h.logger.Error("failed to write message", slog.String("error", err.Error()))
-			return // Завершаем соединение при ошибке
+			return
 		}
 	}
 }
@@ -115,7 +108,7 @@ func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-	createdUser, err := h.UserSrv.RegisterUser(r.Context(), u.Nickname, u.Email, u.Password)
+	createdUser, err := h.UserSrv.RegisterUser(r.Context(), u.Username, u.Nickname, u.Email, u.Password)
 	if err != nil {
 		if errors.Is(err, customerrors.ErrInvalidPassword) {
 			http.Error(w, "Password does not meet complexity requirements", http.StatusUnprocessableEntity)

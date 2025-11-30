@@ -7,6 +7,7 @@ var (
 	ErrInvalidNicknameOrPassword = errors.New("invalid nickname or password")
 	ErrExpiredToken              = errors.New("expired token")
 	ErrEmailAlreadyExists        = errors.New("email already exists")
+	ErrUsernameAlreadyExists     = errors.New("username already exists")
 	ErrInvalidPassword           = errors.New("password does not meet complexity requirements")
 	ErrMessageDoesNotExists      = errors.New("the messsage does not exists")
 	ErrEmptyQuery                = errors.New("search query is empty")

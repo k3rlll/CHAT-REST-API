@@ -9,5 +9,5 @@ type Message struct {
 	Text      string    `json:"text"`
 	CreatedAt time.Time `json:"created_at"`
 	ChatID    int64     `json:"chat_id"`
-	SenderID  int64     `json:"sender_id"`
+	Sender    string    `json:"sender"`
 }

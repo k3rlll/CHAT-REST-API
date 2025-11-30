@@ -27,7 +27,7 @@ func NewChatService(user domUser.UserRepository, chat dom.ChatRepository, logger
 func (c *ChatService) CreateChat(ctx context.Context,
 	isPrivate bool,
 	title string,
-	members []int64) (dom.Chat, error) {
+	members []string) (dom.Chat, error) {
 	if title == "" {
 		c.Logger.Info("title is empty", errors.New("title cannot be empty"))
 		return dom.Chat{}, errors.New("title cannot be empty")
@@ -71,15 +71,15 @@ func (c *ChatService) DeleteChat(ctx context.Context, chatID int64) error {
 	return nil
 }
 
-func (c *ChatService) ListOfChats(ctx context.Context) ([]dom.Chat, error) {
+func (c *ChatService) ListOfChats(ctx context.Context, username string) ([]dom.Chat, error) {
 
-	return c.Chat.ListOfChats(ctx)
+	return c.Chat.ListOfChats(ctx, username)
 
 }
 
-func (c *ChatService) GetChatDetails(ctx context.Context, chatID int64, userID int64) (dom.Chat, error) {
+func (c *ChatService) GetChatDetails(ctx context.Context, chatID int64, username string) (dom.Chat, error) {
 
-	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
+	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, username)
 	if err != nil {
 		c.Logger.Error("failed to check membership", err.Error())
 		return dom.Chat{}, customerrors.ErrFailedToCheck
@@ -98,11 +98,11 @@ func (c *ChatService) GetChatDetails(ctx context.Context, chatID int64, userID i
 
 func (c *ChatService) OpenChat(ctx context.Context,
 	chatID int64,
-	userID int64) (dom.Chat,
+	username string) (dom.Chat,
 	[]domMessage.Message,
 	error) {
 
-	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
+	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, username)
 	if err != nil {
 		c.Logger.Error("failed to check membership", err.Error())
 		return dom.Chat{}, nil, customerrors.ErrFailedToCheck
@@ -124,7 +124,7 @@ func (c *ChatService) OpenChat(ctx context.Context,
 	details.MembersCount = len(details.Members)
 	details.Members = nil
 
-	messages, err := c.Chat.OpenChat(ctx, chatID, userID)
+	messages, err := c.Chat.OpenChat(ctx, chatID, username)
 	if err != nil {
 		c.Logger.Error("failed to open chat", err.Error())
 		return dom.Chat{}, nil, err
@@ -133,13 +133,13 @@ func (c *ChatService) OpenChat(ctx context.Context,
 	return details, messages, nil
 }
 
-func (c *ChatService) AddMembers(ctx context.Context, chatID int64, UserID int64, members []int64) error {
-	if c.User.CheckUserExists(ctx, UserID) {
+func (c *ChatService) AddMembers(ctx context.Context, chatID int64, username string, members []string) error {
+	if c.User.CheckUsernameExists(ctx, username) == false {
 		c.Logger.Info("user does not exist", nil)
 		return customerrors.ErrUserDoesNotExist
 	}
 
-	inChat, err := c.Chat.UserInChat(ctx, chatID, UserID)
+	inChat, err := c.Chat.UserInChat(ctx, chatID, username)
 	if err != nil {
 		c.Logger.Error("failed to check if user is in chat", err.Error())
 		return err
@@ -149,7 +149,7 @@ func (c *ChatService) AddMembers(ctx context.Context, chatID int64, UserID int64
 		return customerrors.ErrUserAlreadyInChat
 	}
 
-	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, UserID)
+	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, username)
 	if err != nil {
 		c.Logger.Error("failed to check membership", err.Error())
 		return customerrors.ErrFailedToCheck

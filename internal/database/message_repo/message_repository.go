@@ -61,7 +61,7 @@ func (m *MessageRepository) Create(ctx context.Context, chatID int64, userID int
 		Text:      text,
 		CreatedAt: time.Now(),
 		ChatID:    chatID,
-		SenderID:  userID,
+		Username:  userID,
 	}
 
 	return res, nil
