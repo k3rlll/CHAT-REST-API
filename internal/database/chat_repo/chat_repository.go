@@ -21,10 +21,10 @@ func NewChatRepository(pool *pgxpool.Pool, logger *slog.Logger) *ChatRepository 
 	}
 }
 
-func (c *ChatRepository) CheckIsMemberOfChat(ctx context.Context, chatID int64, username string) (bool, error) {
+func (c *ChatRepository) CheckIsMemberOfChat(ctx context.Context, chatID int64, userID int64) (bool, error) {
 	isMember := false
 	err := c.pool.QueryRow(ctx,
-		"SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id=$1 AND username=$2)", chatID, username).Scan(&isMember)
+		"SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2)", chatID, userID).Scan(&isMember)
 	if err != nil {
 		c.logger.Error("failed to check if user is a member of the chat", err)
 		return false, err
@@ -33,15 +33,17 @@ func (c *ChatRepository) CheckIsMemberOfChat(ctx context.Context, chatID int64, 
 
 }
 
-func (c *ChatRepository) CreateChat(ctx context.Context, title string, isPrivate bool, members []string) (int64, error) {
+func (c *ChatRepository) CreateChat(ctx context.Context,
+	title string,
+	isPrivate bool,
+	membersID []int64) (int64, error) {
 
 	var chatId int64
-	nickname := ""
+	var nickname string
 
-	if len(members) == 2 {
-		username := members[1]
+	if len(membersID) == 2 {
 		err := c.pool.QueryRow(ctx,
-			"SELECT nickname FROM users WHERE username=$1", username).Scan(&nickname)
+			"SELECT nickname FROM users WHERE user_id=$1", membersID[1]).Scan(&nickname)
 		if err != nil {
 			c.logger.Error("failed to get nickname by username", err.Error())
 			return 0, err
@@ -65,9 +67,9 @@ func (c *ChatRepository) CreateChat(ctx context.Context, title string, isPrivate
 		return 0, err
 	}
 
-	for _, username := range members {
+	for _, userID := range membersID {
 		_, err := tx.Exec(ctx,
-			"INSERT INTO chat_members (chat_id, username) VALUES ($1, $2)", chatId, username)
+			"INSERT INTO chat_members (chat_id, user_id) VALUES ($1, $2)", chatId, userID)
 		if err != nil {
 			c.logger.Error("failed to add users to chat", err.Error())
 			return 0, err
@@ -96,12 +98,12 @@ func (c *ChatRepository) CheckIfChatExists(ctx context.Context, chatID int64) (b
 	return exists, err
 }
 
-func (c *ChatRepository) ListOfChats(ctx context.Context, username string) ([]domChat.Chat, error) {
+func (c *ChatRepository) ListOfChats(ctx context.Context, userID int64) ([]domChat.Chat, error) {
 
 	var chats []domChat.Chat
-	query := "SELECT title FROM chats where id IN (SELECT chat_id FROM chat_members WHERE username=$1)"
+	query := "SELECT title FROM chats where id IN (SELECT chat_id FROM chat_members WHERE user_id=$1)"
 
-	rows, err := c.pool.Query(ctx, query, username)
+	rows, err := c.pool.Query(ctx, query, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -126,28 +128,31 @@ func (c *ChatRepository) ListOfChats(ctx context.Context, username string) ([]do
 func (c *ChatRepository) GetChatDetails(ctx context.Context, chatID int64) (domChat.Chat, error) {
 
 	var chat domChat.Chat
-	query := "SELECT id, title, is_private, members FROM chats WHERE id=$1"
-	err := c.pool.QueryRow(ctx, query, chatID).Scan(&chat.Id, &chat.Title, &chat.IsPrivate, &chat.Members)
+	query := "SELECT id, title, is_private, created_at, members, members_usernames, members_count FROM chats WHERE id=$1"
+	err := c.pool.QueryRow(ctx, query, chatID).Scan(&chat.Id, &chat.Title, &chat.IsPrivate, &chat.CreatedAt, &chat.Members, &chat.MembersUsernames, &chat.MembersCount)
 	if err != nil {
 		c.logger.Error("failed to get chat details", err.Error())
 		return domChat.Chat{}, err
 	}
 	return domChat.Chat{
-		Id:        chat.Id,
-		Title:     chat.Title,
-		IsPrivate: chat.IsPrivate,
-		Members:   chat.Members,
+		Id:               chat.Id,
+		Title:            chat.Title,
+		IsPrivate:        chat.IsPrivate,
+		CreatedAt:        chat.CreatedAt,
+		Members:          chat.Members,
+		MembersUsernames: chat.MembersUsernames,
+		MembersCount:     chat.MembersCount,
 	}, nil
 }
 
-func (c *ChatRepository) OpenChat(ctx context.Context, chatID int64, username string) ([]domMessage.Message, error) {
+func (c *ChatRepository) OpenChat(ctx context.Context, chatID int64, userID int64) ([]domMessage.Message, error) {
 
 	rows, err := c.pool.Query(ctx,
 		"SELECT messages.id, messages.chat_id, messages.sender, messages.text, messages.created_at "+
 			"FROM messages "+
 			"JOIN chat_members ON messages.chat_id = chat_members.chat_id "+
-			"WHERE chat_members.username = $1 AND messages.chat_id = $2 "+
-			"ORDER BY messages.created_at DESC", username, chatID)
+			"WHERE chat_members.user_id = $1 AND messages.chat_id = $2 "+
+			"ORDER BY messages.created_at DESC", userID, chatID)
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +160,12 @@ func (c *ChatRepository) OpenChat(ctx context.Context, chatID int64, username st
 	messages := []domMessage.Message{}
 	for rows.Next() {
 		var message domMessage.Message
-		if err := rows.Scan(&message.Id, &message.ChatID, &message.Sender, &message.Text, &message.CreatedAt); err != nil {
+		if err := rows.Scan(&message.Id,
+			&message.ChatID,
+			&message.SenderID,
+			&message.SenderUsername,
+			&message.Text,
+			&message.CreatedAt); err != nil {
 			c.logger.Error("failed to scan message", err.Error())
 			return nil, err
 		}

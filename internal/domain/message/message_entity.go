@@ -5,9 +5,10 @@ import (
 )
 
 type Message struct {
-	Id        int64     `json:"message_id"`
-	Text      string    `json:"text"`
-	CreatedAt time.Time `json:"created_at"`
-	ChatID    int64     `json:"chat_id"`
-	Sender    string    `json:"sender"`
+	Id             int64     `json:"message_id"`
+	Text           string    `json:"text"`
+	CreatedAt      time.Time `json:"created_at"`
+	ChatID         int64     `json:"chat_id"`
+	SenderID       int64     `json:"sender_id"`
+	SenderUsername string    `json:"sender_username"`
 }

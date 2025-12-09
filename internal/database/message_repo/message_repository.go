@@ -21,9 +21,6 @@ func NewMessageRepository(pool *pgxpool.Pool, logger *slog.Logger) *MessageRepos
 	}
 }
 
-// type MessageRepository interface {
-// }
-
 func (m *MessageRepository) CheckMessageExists(ctx context.Context, id int64) (bool, error) {
 	exists := false
 
@@ -46,22 +43,23 @@ func (m *MessageRepository) DeleteMessage(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (m *MessageRepository) Create(ctx context.Context, chatID int64, userID int64, text string) (dom.Message, error) {
+func (m *MessageRepository) Create(ctx context.Context, chatID int64, userID int64, username string, text string) (dom.Message, error) {
 	var messageID int64
 
 	err := m.pool.QueryRow(ctx,
-		"INSERT INTO messages (chat_id, sender_id, text) VALUES ($1,$2,$3) RETURNING id", chatID, userID, text).Scan(&messageID)
+		"INSERT INTO messages (chat_id, sender_id, sender, text) VALUES ($1,$2,$3,$4) RETURNING id", chatID, userID, username, text).Scan(&messageID)
 	if err != nil {
 		m.logger.Error("failed to create message", err.Error())
 		return dom.Message{}, err
 	}
 
 	var res = dom.Message{
-		Id:        messageID,
-		Text:      text,
-		CreatedAt: time.Now(),
-		ChatID:    chatID,
-		Username:  userID,
+		Id:             messageID,
+		Text:           text,
+		CreatedAt:      time.Now(),
+		ChatID:         chatID,
+		SenderID:       userID,
+		SenderUsername: username,
 	}
 
 	return res, nil
@@ -77,10 +75,9 @@ func (m *MessageRepository) EditMessage(ctx context.Context, messageID int64, ne
 	return nil
 }
 
-// ListByChat отправляет список сообщений для указанного чата с учетом лимита и смещения.
 func (m *MessageRepository) ListByChat(ctx context.Context, chatID int64) ([]dom.Message, error) {
 	rows, err := m.pool.Query(ctx,
-		`SELECT id, chat_id, sender_id, text, created_at
+		`SELECT id, chat_id, sender_id, sender_username, text, created_at
 		   FROM messages
 		  WHERE chat_id = $1
 		  ORDER BY created_at DESC`, chatID)
@@ -92,7 +89,7 @@ func (m *MessageRepository) ListByChat(ctx context.Context, chatID int64) ([]dom
 	var out []dom.Message
 	for rows.Next() {
 		var m dom.Message
-		if err := rows.Scan(&m.Id, &m.ChatID, &m.SenderID, &m.Text, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.Id, &m.ChatID, &m.SenderID, &m.SenderUsername, &m.Text, &m.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
