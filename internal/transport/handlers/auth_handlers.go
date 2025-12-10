@@ -64,7 +64,7 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.AuthSrv.LoginUser(r.Context(), u.ID, u.Password)
+	AccessToken, RefreshToken, err := h.AuthSrv.LoginUser(r.Context(), u.ID, u.Password)
 	if err != nil {
 		if errors.Is(err, customerrors.ErrInvalidNicknameOrPassword) {
 			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
@@ -77,22 +77,18 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.SetCookie(w, &http.Cookie{
-		Name:     "access_token",
-		Value:    token.AccessToken,
-		HttpOnly: true,
-		Path:     "/",
-		Secure:   true,
-		SameSite: http.SameSiteStrictMode,
-	})
-
-	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
-		Value:    token.RefreshToken,
+		Expires:  time.Now().Add(time.Hour * 24 * 7),
+		Value:    RefreshToken,
 		HttpOnly: true,
 		Path:     "/auth",
 		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 	})
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Authorization", "Bearer "+AccessToken)
+
 	w.WriteHeader(http.StatusOK)
 }
 

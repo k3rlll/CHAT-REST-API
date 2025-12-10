@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	dom "main/internal/domain/auth"
+	domUser "main/internal/domain/user"
 	"main/internal/pkg/customerrors"
 	"main/internal/pkg/utils"
 
@@ -34,30 +35,32 @@ func (t *TokenRepository) SaveRefreshToken(ctx context.Context,
 	return err
 }
 
+func (t *TokenRepository) GetByEmail(ctx context.Context, email string) (domUser.User, error) {
+	var user domUser.User
+
+	err := t.pool.QueryRow(ctx,
+		"SELECT id, username, password_hash FROM users WHERE email=$1", email).
+		Scan(&user.ID, &user.Username, &user.Password)
+	if err != nil {
+		return domUser.User{}, err
+	}
+	return user, nil
+}
+
 func (t *TokenRepository) Login(ctx context.Context,
-	token *dom.TokenPair,
+	RefreshToken string,
 	userID int64,
-	password string) (*dom.TokenPair, error) {
+	password string) (domUser.User, error) {
 	var passwordHash string
 
 	err := t.pool.QueryRow(ctx,
 		"SELECT password_hash FROM users WHERE id=$1", userID).Scan(&passwordHash)
 	if err != nil {
-		t.logger.Error("failed to get user password hash", slog.String("error", err.Error()))
-		return nil, customerrors.ErrInvalidNicknameOrPassword
+		return domUser.User{}, customerrors.ErrInvalidNicknameOrPassword
 	}
 
-	if !utils.CheckPasswordHash(password, passwordHash) {
-		t.logger.Error("failed to login: invalid password")
-		return nil, customerrors.ErrInvalidNicknameOrPassword
-	}
 
-	if err := t.SaveRefreshToken(ctx, userID, token.RefreshToken); err != nil {
-		t.logger.Error("failed to save refresh token", slog.String("error", err.Error()))
-		return nil, err
-	}
-
-	return token, nil
+	return domUser.User{}, nil
 }
 
 var _ dom.TokenRepository = (*TokenRepository)(nil)

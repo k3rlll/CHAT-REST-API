@@ -22,7 +22,7 @@ func NewMessageService(chat ch.ChatRepository, message msg.MessageRepository, lo
 	}
 }
 
-func (m *MessageService) Send(ctx context.Context, chatID int64, userID int64, text string) (msg.Message, error) {
+func (m *MessageService) Send(ctx context.Context, chatID int64, userID int64, username string, text string) (msg.Message, error) {
 	isMember, err := m.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
 	if err != nil {
 		m.Logger.Error("failed to check if user is member of chat", err.Error())
@@ -33,7 +33,7 @@ func (m *MessageService) Send(ctx context.Context, chatID int64, userID int64, t
 		return msg.Message{}, customerrors.ErrUserNotMemberOfChat
 	}
 
-	message, err := m.Message.Create(ctx, chatID, userID, text)
+	message, err := m.Message.Create(ctx, chatID, userID, username, text)
 	if err != nil {
 		m.Logger.Error("failed to create message", err.Error())
 		return msg.Message{}, err
@@ -85,11 +85,5 @@ func (m *MessageService) Edit(ctx context.Context, messageID int64, newText stri
 }
 
 func (m *MessageService) List(ctx context.Context, chatID int64) ([]msg.Message, error) {
-	// if limit <= 0 || limit > 200 {
-	// 	limit = 50
-	// }
-	// if offset < 0 {
-	// 	offset = 0
-	// }
 	return m.Message.ListByChat(ctx, chatID)
 }

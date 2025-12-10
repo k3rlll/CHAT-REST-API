@@ -1,68 +1,73 @@
 package jwt
 
 import (
-	dom "main/internal/domain/auth"
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
+type Token interface {
+	NewAccessToken(userID int64, ttl time.Duration) (string, error)
+	Parse(accessToken string) (int64, error)
+	NewRefreshToken() (string, error)
+}
+
 type Claims struct {
-	UserID int64 `json:"user_id"`
-	jwt.RegisteredClaims
+	mysecretkey string
 }
 
-func GenerateJWT(userID int64) (*dom.TokenPair, error) {
-	accessExpiration := time.Now().Add(15 * time.Hour)
-	accessClaims := &Claims{
-		UserID: userID,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(accessExpiration),
-		},
+func NewClaims(mysecretkey string) (*Claims, error) {
+	if mysecretkey == "" {
+		fmt.Errorf("MYSECRETKEY is not set")
 	}
-
-	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, accessClaims)
-	accessString, err := accessToken.SignedString([]byte("mysecretkey"))
-	if err != nil {
-		return nil, err
-	}
-
-	refreshExpiration := time.Now().Add(15 * 24 * time.Hour)
-	refreshClaims := &Claims{
-		UserID: userID,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(refreshExpiration),
-		},
-	}
-
-	refreshToken := jwt.NewWithClaims(jwt.SigningMethodHS256, refreshClaims)
-	refreshString, err := refreshToken.SignedString([]byte("mysecretkey"))
-	if err != nil {
-		return nil, err
-	}
-
-	return &dom.TokenPair{
-		AccessToken:  accessString,
-		RefreshToken: refreshString,
-	}, nil
+	return &Claims{mysecretkey: mysecretkey}, nil
 }
 
-func ValidateJWT(tokenString string) (*Claims, error) {
-
-	claims := &Claims{}
-
-	token, err := jwt.ParseWithClaims(tokenString, claims,
-		func(token *jwt.Token) (interface{}, error) {
-			return []byte("mysecretkey"), nil
-		})
+func (c *Claims) NewAccessToken(userID int64, TTL time.Duration) (string, error) {
+	accessExpiration := time.Now().Add(TTL)
+	accessToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id": userID,
+		"exp":     accessExpiration.Unix(),
+		"iat":     time.Now().Unix(),
+	})
+	accessString, err := accessToken.SignedString([]byte(c.mysecretkey))
 	if err != nil {
-		return nil, err
+		return "", err
+	}
+	return accessString, nil
+}
+
+func (c *Claims) NewRefreshToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+func (c *Claims) Parse(accessToken string) (int64, error) {
+
+	token, err := jwt.Parse(accessToken, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(c.mysecretkey), nil
+	})
+
+	if err != nil {
+		return 0, fmt.Errorf("parse token:%w", err)
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid {
+		return 0, fmt.Errorf("invalid token")
 	}
 
-	if !token.Valid {
-		return nil, jwt.ErrTokenExpired
+	sub, ok := claims["user_id"].(float64)
+	if !ok {
+		return 0, fmt.Errorf("invalid token claims")
 	}
-
-	return claims, nil
-
+	return int64(sub), nil
 }

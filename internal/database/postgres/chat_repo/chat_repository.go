@@ -39,17 +39,23 @@ func (c *ChatRepository) CreateChat(ctx context.Context,
 	membersID []int64) (int64, error) {
 
 	var chatId int64
-	var nickname string
+	var username string
+
+	if len(membersID) ==1 {
+		_, err:= c.pool.Exec(ctx,
+			"select username from users where user_id=$1", membersID[0])
+		if err != nil {
+			c.logger.Error("failed to get username by userID", err.Error())
+			return 0, err
+		}
+	}
 
 	if len(membersID) == 2 {
 		err := c.pool.QueryRow(ctx,
-			"SELECT nickname FROM users WHERE user_id=$1", membersID[1]).Scan(&nickname)
+			"SELECT username FROM users WHERE user_id=$1", membersID[1]).Scan(&username)
 		if err != nil {
 			c.logger.Error("failed to get nickname by username", err.Error())
 			return 0, err
-		}
-		if nickname != "" {
-			title = nickname
 		}
 	}
 
@@ -177,10 +183,10 @@ func (c *ChatRepository) OpenChat(ctx context.Context, chatID int64, userID int6
 	return messages, nil
 }
 
-func (c *ChatRepository) AddMembers(ctx context.Context, chatID int64, members []string) error {
-	for _, username := range members {
+func (c *ChatRepository) AddMembers(ctx context.Context, chatID int64, members []int64) error {
+	for _, userID := range members {
 		_, err := c.pool.Exec(ctx,
-			"INSERT INTO chat_members (chat_id, username) VALUES ($1, $2)", chatID, username)
+			"INSERT INTO chat_members (chat_id, user_id) VALUES ($1, $2)", chatID, userID)
 		if err != nil {
 			c.logger.Error("failed to add member to chat", err.Error())
 			return err
@@ -189,10 +195,10 @@ func (c *ChatRepository) AddMembers(ctx context.Context, chatID int64, members [
 	return nil
 }
 
-func (c *ChatRepository) UserInChat(ctx context.Context, chatID int64, username string) (bool, error) {
+func (c *ChatRepository) UserInChat(ctx context.Context, chatID int64, userID int64) (bool, error) {
 	isMember := false
 	err := c.pool.QueryRow(ctx,
-		"SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id=$1 AND username=$2)", chatID, username).Scan(&isMember)
+		"SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2)", chatID, userID).Scan(&isMember)
 	return isMember, err
 }
 
