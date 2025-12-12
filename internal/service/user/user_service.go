@@ -16,13 +16,13 @@ var (
 )
 
 type UserService struct {
-	Repo     dom.UserRepository
+	Repo     dom.UserInterface
 	Logger   *slog.Logger
 	Timeout  time.Duration
 	MaxLimit int64
 }
 
-func NewUserService(repo dom.UserRepository, logger *slog.Logger) *UserService {
+func NewUserService(repo dom.UserInterface, logger *slog.Logger) *UserService {
 	if logger == nil {
 		logger = slog.Default()
 	}

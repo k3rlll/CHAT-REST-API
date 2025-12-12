@@ -6,24 +6,23 @@ import (
 	dom "main/internal/domain/auth"
 	domUser "main/internal/domain/user"
 	"main/internal/pkg/customerrors"
-	"main/internal/pkg/utils"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type TokenRepository struct {
+type AuthRepository struct {
 	pool   *pgxpool.Pool
 	logger *slog.Logger
 }
 
-func NewTokenRepository(pool *pgxpool.Pool, logger *slog.Logger) *TokenRepository {
-	return &TokenRepository{
+func NewAuthRepository(pool *pgxpool.Pool, logger *slog.Logger) *AuthRepository {
+	return &AuthRepository{
 		pool:   pool,
 		logger: logger,
 	}
 }
 
-func (t *TokenRepository) SaveRefreshToken(ctx context.Context,
+func (t *AuthRepository) SaveRefreshToken(ctx context.Context,
 	userID int64,
 	refreshToken string) error {
 
@@ -35,7 +34,7 @@ func (t *TokenRepository) SaveRefreshToken(ctx context.Context,
 	return err
 }
 
-func (t *TokenRepository) GetByEmail(ctx context.Context, email string) (domUser.User, error) {
+func (t *AuthRepository) GetByEmail(ctx context.Context, email string) (domUser.User, error) {
 	var user domUser.User
 
 	err := t.pool.QueryRow(ctx,
@@ -47,7 +46,7 @@ func (t *TokenRepository) GetByEmail(ctx context.Context, email string) (domUser
 	return user, nil
 }
 
-func (t *TokenRepository) Login(ctx context.Context,
+func (t *AuthRepository) Login(ctx context.Context,
 	RefreshToken string,
 	userID int64,
 	password string) (domUser.User, error) {
@@ -58,9 +57,17 @@ func (t *TokenRepository) Login(ctx context.Context,
 	if err != nil {
 		return domUser.User{}, customerrors.ErrInvalidNicknameOrPassword
 	}
+	var user domUser.User
+	user.ID = userID
+	user.Password = passwordHash
 
-
-	return domUser.User{}, nil
+	return user, nil
 }
 
-var _ dom.TokenRepository = (*TokenRepository)(nil)
+func (t *AuthRepository) DeleteRefreshToken(ctx context.Context, userID int64) error {
+	_, err := t.pool.Exec(ctx,
+		"DELETE FROM refresh_tokens WHERE user_id=$1", userID)
+	return err
+}
+
+var _ dom.AuthInterface = (*AuthRepository)(nil)

@@ -2,7 +2,7 @@ package message
 
 import "context"
 
-type MessageRepository interface {
+type MessageInterface interface {
 	CheckMessageExists(ctx context.Context, id int64) (bool, error)
 	DeleteMessage(ctx context.Context, id int64) error
 	Create(ctx context.Context, chatID int64, userID int64, username string, text string) (Message, error)

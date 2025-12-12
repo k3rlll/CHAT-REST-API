@@ -202,4 +202,4 @@ func (c *ChatRepository) UserInChat(ctx context.Context, chatID int64, userID in
 	return isMember, err
 }
 
-var _ domChat.ChatRepository = (*ChatRepository)(nil)
+var _ domChat.ChatInterface = (*ChatRepository)(nil)

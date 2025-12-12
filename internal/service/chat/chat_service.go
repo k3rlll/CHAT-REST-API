@@ -11,12 +11,12 @@ import (
 )
 
 type ChatService struct {
-	User   domUser.UserRepository
-	Chat   dom.ChatRepository
+	User   domUser.UserInterface
+	Chat   dom.ChatInterface
 	Logger *slog.Logger
 }
 
-func NewChatService(user domUser.UserRepository, chat dom.ChatRepository, logger *slog.Logger) *ChatService {
+func NewChatService(user domUser.UserInterface, chat dom.ChatInterface, logger *slog.Logger) *ChatService {
 	return &ChatService{
 		User:   user,
 		Chat:   chat,

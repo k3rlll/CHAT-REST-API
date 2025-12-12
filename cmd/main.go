@@ -58,13 +58,14 @@ func main() {
 		return
 	}
 
-	authRepo := auth.NewTokenRepository(dbConn, logger)
+	authRepo := auth.NewAuthRepository(dbConn, logger)
 	userRepo := user.NewUserRepository(dbConn, logger)
 	chatRepo := chat.NewChatRepository(dbConn, logger)
 	msgRepo := msg.NewMessageRepository(dbConn, logger)
+	jwtService := srvAuth.NewTokenService()
 
 	userService := srvUser.NewUserService(userRepo, logger)
-	authService := srvAuth.NewAuthService(authRepo, logger)
+	authService := srvAuth.NewAuthService(authRepo, logger, jwtService)
 	chatService := srvChat.NewChatService(userRepo, chatRepo, logger)
 	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, logger)
 

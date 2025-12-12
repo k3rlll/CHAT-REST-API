@@ -9,11 +9,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-type Token interface {
-	NewAccessToken(userID int64, ttl time.Duration) (string, error)
-	Parse(accessToken string) (int64, error)
-	NewRefreshToken() (string, error)
-}
+
 
 type Claims struct {
 	mysecretkey string

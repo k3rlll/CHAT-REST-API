@@ -125,4 +125,4 @@ func (r *UserRepository) ChangeUsername(ctx context.Context, username string) (d
 }
 
 
-var _ dom.UserRepository = (*UserRepository)(nil)
+var _ dom.UserInterface = (*UserRepository)(nil)

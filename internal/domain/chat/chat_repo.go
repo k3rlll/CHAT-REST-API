@@ -5,7 +5,7 @@ import (
 	domMessage "main/internal/domain/message"
 )
 
-type ChatRepository interface {
+type ChatInterface interface {
 	GetChatDetails(ctx context.Context, chatID int64) (Chat, error)
 	ListOfChats(ctx context.Context, userID int64) ([]Chat, error)
 	CheckIfChatExists(ctx context.Context, chatID int64) (bool, error)

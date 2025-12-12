@@ -9,12 +9,12 @@ import (
 )
 
 type MessageService struct {
-	Chat    ch.ChatRepository
-	Message msg.MessageRepository
+	Chat    ch.ChatInterface
+	Message msg.MessageInterface
 	Logger  *slog.Logger
 }
 
-func NewMessageService(chat ch.ChatRepository, message msg.MessageRepository, logger *slog.Logger) *MessageService {
+func NewMessageService(chat ch.ChatInterface, message msg.MessageInterface, logger *slog.Logger) *MessageService {
 	return &MessageService{
 		Chat:    chat,
 		Message: message,
