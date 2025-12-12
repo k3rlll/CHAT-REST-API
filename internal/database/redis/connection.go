@@ -7,11 +7,11 @@ import (
 	"github.com/go-redis/redis/v8"
 )
 
-func NewRedisClient(ctx context.Context, addr string, password string, db int) (*redis.Client, error) {
+func NewRedisClient(ctx context.Context, addr string, password string) (*redis.Client, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:         addr,
 		Password:     password,
-		DB:           db,
+		DB:           0,
 		PoolSize:     10,
 		MinIdleConns: 2,
 		DialTimeout:  5 * time.Second,

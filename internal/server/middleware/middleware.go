@@ -11,10 +11,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-type Manager interface {
-	NewAccessToken(userID int64, ttl time.Duration) (string, error)
+type JWTManager interface {
 	Parse(accessToken string) (int64, error)
-	NewRefreshToken() (string, error)
+	Exists(ctx context.Context, token string) (bool, error)
 }
 
 func New(log *slog.Logger) func(next http.Handler) http.Handler {
@@ -48,7 +47,7 @@ func New(log *slog.Logger) func(next http.Handler) http.Handler {
 	}
 }
 
-func JWTAuth(token Manager) func(http.Handler) http.Handler {
+func JWTAuth(manager JWTManager) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -62,8 +61,12 @@ func JWTAuth(token Manager) func(http.Handler) http.Handler {
 				}
 
 				tokenString := c.Value
+				if exists, err := manager.Exists(r.Context(), tokenString); err != nil || exists {
+					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					return
+				}
 
-				userID, err := token.Parse(tokenString)
+				userID, err := manager.Parse(tokenString)
 				if err != nil {
 					http.Error(w, "unauthorized", http.StatusUnauthorized)
 					return

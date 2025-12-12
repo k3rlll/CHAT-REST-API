@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	dom "main/internal/domain/chat"
 	"main/internal/pkg/customerrors"
-	mwLogger "main/internal/server/logger"
+	mwMiddleware "main/internal/server/middleware"
 	srvAuth "main/internal/service/auth"
 	srvChat "main/internal/service/chat"
 	srvMessage "main/internal/service/message"
@@ -21,26 +21,30 @@ type ChatHandler struct {
 	MessSrv *srvMessage.MessageService
 	ChatSrv *srvChat.ChatService
 	logger  *slog.Logger
+	Manager mwMiddleware.Manager
 }
 
 func NewChatHandler(userSrv *srvUser.UserService,
 	authSrv *srvAuth.AuthService,
 	messSrv *srvMessage.MessageService,
 	chatSrv *srvChat.ChatService,
-	logger *slog.Logger) *ChatHandler {
+	logger *slog.Logger,
+	Manager mwMiddleware.Manager,
+) *ChatHandler {
 	return &ChatHandler{
 		UserSrv: userSrv,
 		AuthSrv: authSrv,
 		MessSrv: messSrv,
 		ChatSrv: chatSrv,
 		logger:  logger,
+		Manager: Manager,
 	}
 }
 
 // все пути относительно /chats
 func (h *ChatHandler) RegisterRoutes(r chi.Router) {
 	r.Group(func(r chi.Router) {
-		r.Use(mwLogger.JWTAuth)
+		r.Use(mwMiddleware.JWTAuth(h.Manager, h.Manager))
 		r.Post("/", h.CreateChatHandler)
 		r.Get("/", h.GetChatsHandler)
 		r.Get("/{id}", h.OpenChatHandler)
@@ -57,7 +61,7 @@ info:    Создать чат: direct (user_id) или group (title)
 func (h *ChatHandler) CreateChatHandler(w http.ResponseWriter, r *http.Request) {
 
 	var chat dom.Chat
-	
+
 	if err := json.NewDecoder(r.Body).Decode(&chat); err != nil {
 		h.logger.Error("failed to decode request", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -80,7 +84,15 @@ func (h *ChatHandler) CreateChatHandler(w http.ResponseWriter, r *http.Request) 
 // info:    Список чатов пользователя; параметры: cursor, limit, q
 
 func (h *ChatHandler) GetChatsHandler(w http.ResponseWriter, r *http.Request) {
-	chats, err := h.ChatSrv.ListOfChats(r.Context())
+
+	var userId int64
+	if err := json.NewDecoder(r.Body).Decode(&userId); err != nil {
+		h.logger.Error("failed to decode request", slog.String("error", err.Error()))
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	chats, err := h.ChatSrv.ListOfChats(r.Context(), userId)
 	if err != nil {
 		h.logger.Error("failed to get list of chats", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)

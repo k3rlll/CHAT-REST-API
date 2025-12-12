@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	domMess "main/internal/domain/message"
-	mwLogger "main/internal/server/logger"
+	mwMiddleware "main/internal/server/middleware"
 	srvAuth "main/internal/service/auth"
 	srvChat "main/internal/service/chat"
 	srvMessage "main/internal/service/message"
@@ -22,13 +22,17 @@ type MessageHandler struct {
 	ChatSrv  *srvChat.ChatService
 	upgrader websocket.Upgrader
 	logger   *slog.Logger
+	Manager  mwMiddleware.Manager
 }
 
 func NewMessageHandler(userSrv *srvUser.UserService,
 	authSrv *srvAuth.AuthService,
 	messSrv *srvMessage.MessageService,
 	chatSrv *srvChat.ChatService,
-	logger *slog.Logger) *MessageHandler {
+	logger *slog.Logger,
+	Manager mwMiddleware.Manager,
+
+) *MessageHandler {
 	return &MessageHandler{
 		UserSrv:  userSrv,
 		AuthSrv:  authSrv,
@@ -36,6 +40,7 @@ func NewMessageHandler(userSrv *srvUser.UserService,
 		ChatSrv:  chatSrv,
 		upgrader: websocket.Upgrader{},
 		logger:   logger,
+		Manager:  Manager,
 	}
 }
 
@@ -43,7 +48,7 @@ func NewMessageHandler(userSrv *srvUser.UserService,
 func (h *MessageHandler) RegisterRoutes(r chi.Router) {
 
 	r.Group(func(r chi.Router) {
-		r.Use(mwLogger.JWTAuth)
+		r.Use(mwMiddleware.JWTAuth(h.Manager, h.Manager))
 		r.Post("/", h.Send)
 		r.Delete("/{msg_id}", h.DeleteMessageHandler)
 		r.Get("/", h.ListMessageHandlers)
@@ -63,13 +68,16 @@ func (h *MessageHandler) Send(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	message, err := h.MessSrv.Send(r.Context(), request.ChatID, request.SenderID, request.Text)
+	message, err := h.MessSrv.Send(r.Context(),
+		request.ChatID,
+		request.SenderID,
+		request.SenderUsername,
+		request.Text)
 	if err != nil {
 		h.logger.Error("failed to send message", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 	b, err := json.MarshalIndent(message, "", "	")
 	if err != nil {
 		h.logger.Error("failed to marshal message", err.Error())
@@ -82,6 +90,7 @@ func (h *MessageHandler) Send(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	w.WriteHeader(http.StatusOK)
 }
 
 // pattern: /v1/chats/id/messages/{msg_id}

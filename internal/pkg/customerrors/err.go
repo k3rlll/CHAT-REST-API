@@ -16,4 +16,5 @@ var (
 	ErrFailedToCheck             = errors.New("failed to check")
 	ErrUserDoesNotExist          = errors.New("user does not exist")
 	ErrUserAlreadyInChat         = errors.New("user is already in the chat")
+	ErrSecretKeyNotSet           = errors.New("secret key is not set")
 )

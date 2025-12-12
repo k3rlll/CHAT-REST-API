@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	domUser "main/internal/domain/user"
 	"main/internal/pkg/customerrors"
-	mwLogger "main/internal/server/logger"
+	mwMiddleware "main/internal/server/middleware"
 	srvAuth "main/internal/service/auth"
 	srvUser "main/internal/service/user"
 	"net/http"
@@ -20,9 +20,13 @@ type AuthHandler struct {
 	UserSrv *srvUser.UserService
 	AuthSrv *srvAuth.AuthService
 	logger  *slog.Logger
+	Manager mwMiddleware.Manager
 }
 
-func NewAuthHandler(userSrv *srvUser.UserService, authSrv *srvAuth.AuthService, logger *slog.Logger) *AuthHandler {
+func NewAuthHandler(
+	userSrv *srvUser.UserService,
+	authSrv *srvAuth.AuthService,
+	logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{
 		UserSrv: userSrv,
 		AuthSrv: authSrv,
@@ -35,7 +39,7 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/login", h.LoginHandler)
 
 	r.Group(func(r chi.Router) {
-		r.Use(mwLogger.JWTAuth)
+		r.Use(mwMiddleware.JWTAuth(h.Manager, h.Manager))
 		r.Post("/logout", h.LogoutHandler)
 	})
 }
@@ -109,25 +113,26 @@ failed:
 
 func (h *AuthHandler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
-		Value:    "",
-		Expires:  time.Unix(0, 0),
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-		Secure:   true,
-	})
+	var user int64
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "access_token",
-		Value:    "",
-		Expires:  time.Unix(0, 0),
-		HttpOnly: true,
-		SameSite: http.SameSiteStrictMode,
-		Secure:   true,
-	})
+	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+		h.logger.Error("failed to decode request", slog.String("error", err.Error()))
+		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+		return
+	}
 
-	w.WriteHeader(http.StatusNoContent)
+	c, err := r.Cookie("refresh_token")
+	if err != nil {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+	tokenString := c.Value
+
+	if err := h.AuthSrv.LogoutUser(r.Context(), user, tokenString); err != nil {
+		h.logger.Error("failed to logout user", slog.String("error", err.Error()))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
 }
 
 /*

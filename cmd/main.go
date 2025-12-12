@@ -12,12 +12,13 @@ import (
 	"syscall"
 	"time"
 
-	db "main/internal/database/postgres"
+	psql "main/internal/database/postgres"
 	auth "main/internal/database/postgres/auth_repo"
 	chat "main/internal/database/postgres/chat_repo"
 	msg "main/internal/database/postgres/message_repo"
 	user "main/internal/database/postgres/user_repo"
-	mwLogger "main/internal/server/logger"
+	rdb "main/internal/database/redis"
+	mwMiddleware "main/internal/server/middleware"
 	srvAuth "main/internal/service/auth"
 	srvChat "main/internal/service/chat"
 	srvMessage "main/internal/service/message"
@@ -46,7 +47,7 @@ func main() {
 
 	router := chi.NewRouter()
 
-	dbConn, err := db.NewDBPool(cfg.DatabaseDSN())
+	dbConn, err := psql.NewDBPool(cfg.DatabaseDSN())
 	if err != nil {
 		logger.Error("failed to connect to database", slog.String("error", err.Error()))
 		return
@@ -57,6 +58,12 @@ func main() {
 		logger.Error("failed to ping database", slog.String("error", err.Error()))
 		return
 	}
+	redis, err := rdb.NewRedisClient(context.Background(), cfg.Redis.Addr, cfg.Redis.Password)
+	if err != nil {
+		logger.Error("failed to connect to redis", slog.String("error", err.Error()))
+		return
+	}
+	defer redis.Close()
 
 	authRepo := auth.NewAuthRepository(dbConn, logger)
 	userRepo := user.NewUserRepository(dbConn, logger)
@@ -65,7 +72,7 @@ func main() {
 	jwtService := srvAuth.NewTokenService()
 
 	userService := srvUser.NewUserService(userRepo, logger)
-	authService := srvAuth.NewAuthService(authRepo, logger, jwtService)
+	authService := srvAuth.NewAuthService(authRepo, logger, jwtService, redis)
 	chatService := srvChat.NewChatService(userRepo, chatRepo, logger)
 	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, logger)
 
@@ -80,7 +87,7 @@ func main() {
 	logger.Info("Connected to database successfully")
 
 	router.Use(middleware.RequestID)
-	router.Use(mwLogger.New(logger))
+	router.Use(mwMiddleware.New(logger))
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
 	router.Use(cors.Handler(cors.Options{
@@ -94,8 +101,8 @@ func main() {
 
 	userHandler := httpHandler.NewUserHandler(userService, authService, messageService, chatService, upgrader, logger)
 	authHandler := httpHandler.NewAuthHandler(userService, authService, logger)
-	chatHandler := httpHandler.NewChatHandler(userService, authService, messageService, chatService, logger)
-	messageHandler := httpHandler.NewMessageHandler(userService, authService, messageService, chatService, logger)
+	chatHandler := httpHandler.NewChatHandler(userService, authService, messageService, chatService, logger )
+	messageHandler := httpHandler.NewMessageHandler(userService, authService, messageService, chatService, logger )
 
 	HTTP := httpHandler.NewHTTPHandler(userHandler, authHandler, chatHandler, messageHandler, logger)
 

@@ -9,9 +9,12 @@ import (
 	customerrors "main/internal/pkg/customerrors"
 	jwt "main/internal/pkg/jwt"
 	"main/internal/pkg/utils"
+
+	"github.com/go-redis/redis/v8"
 )
 
 type AuthService struct {
+	redis  *redis.Client
 	jwt    Token
 	Repo   db.AuthInterface
 	Logger *slog.Logger
@@ -19,7 +22,6 @@ type AuthService struct {
 
 type Token interface {
 	NewAccessToken(userID int64, ttl time.Duration) (string, error)
-	Parse(accessToken string) (int64, error)
 	NewRefreshToken() (string, error)
 }
 
@@ -27,8 +29,9 @@ func NewTokenService() Token {
 	return &jwt.Claims{}
 }
 
-func NewAuthService(repo db.AuthInterface, logger *slog.Logger, jwt Token) *AuthService {
+func NewAuthService(repo db.AuthInterface, logger *slog.Logger, jwt Token, redis *redis.Client) *AuthService {
 	return &AuthService{
+		redis:  redis,
 		jwt:    jwt,
 		Repo:   repo,
 		Logger: logger,
@@ -69,7 +72,9 @@ func (s *AuthService) LoginUser(ctx context.Context,
 	return AccessToken, RefreshToken, nil
 }
 
-func (s *AuthService) LogoutUser(ctx context.Context, userID int64) error {
+func (s *AuthService) LogoutUser(ctx context.Context, userID int64, accessToken string) error {
+
+	s.redis.Set(ctx, accessToken, "blacklist", time.Minute*15)
 
 	err := s.Repo.DeleteRefreshToken(ctx, userID)
 	if err != nil {

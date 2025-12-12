@@ -43,11 +43,15 @@ func (m *MessageRepository) DeleteMessage(ctx context.Context, id int64) error {
 	return nil
 }
 
-func (m *MessageRepository) Create(ctx context.Context, chatID int64, userID int64, username string, text string) (dom.Message, error) {
+func (m *MessageRepository) Create(
+	ctx context.Context, 
+	chatID int64, userID int64, 
+	senderUsername string, text string) (dom.Message, error) {
 	var messageID int64
+	query:="INSERT INTO messages (chat_id, sender_id, sender_username, text) VALUES ($1,$2,$3,$4) RETURNING id"
 
 	err := m.pool.QueryRow(ctx,
-		"INSERT INTO messages (chat_id, sender_id, sender, text) VALUES ($1,$2,$3,$4) RETURNING id", chatID, userID, username, text).Scan(&messageID)
+		query, chatID, userID, senderUsername, text).Scan(&messageID)
 	if err != nil {
 		m.logger.Error("failed to create message", err.Error())
 		return dom.Message{}, err
@@ -59,7 +63,7 @@ func (m *MessageRepository) Create(ctx context.Context, chatID int64, userID int
 		CreatedAt:      time.Now(),
 		ChatID:         chatID,
 		SenderID:       userID,
-		SenderUsername: username,
+		SenderUsername: senderUsername,
 	}
 
 	return res, nil

@@ -22,7 +22,7 @@ func NewMessageService(chat ch.ChatInterface, message msg.MessageInterface, logg
 	}
 }
 
-func (m *MessageService) Send(ctx context.Context, chatID int64, userID int64, username string, text string) (msg.Message, error) {
+func (m *MessageService) Send(ctx context.Context, chatID int64, userID int64, senderUsername string, text string) (msg.Message, error) {
 	isMember, err := m.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
 	if err != nil {
 		m.Logger.Error("failed to check if user is member of chat", err.Error())
@@ -33,7 +33,7 @@ func (m *MessageService) Send(ctx context.Context, chatID int64, userID int64, u
 		return msg.Message{}, customerrors.ErrUserNotMemberOfChat
 	}
 
-	message, err := m.Message.Create(ctx, chatID, userID, username, text)
+	message, err := m.Message.Create(ctx, chatID, userID, senderUsername, text)
 	if err != nil {
 		m.Logger.Error("failed to create message", err.Error())
 		return msg.Message{}, err

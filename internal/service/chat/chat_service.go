@@ -112,11 +112,11 @@ func (c *ChatService) OpenChat(ctx context.Context,
 		c.Logger.Error("failed to get chat details", err.Error())
 		return dom.Chat{}, nil, err
 	}
-	for i, member := range details.Members {
-		details.Members[i] = member
+	for i, member := range details.MembersID {
+		details.MembersID[i] = member
 	}
-	details.MembersCount = len(details.Members)
-	details.Members = nil
+	details.MembersCount = len(details.MembersID)
+	details.MembersID = nil
 
 	messages, err := c.Chat.OpenChat(ctx, chatID, userID)
 	if err != nil {

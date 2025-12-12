@@ -27,6 +27,10 @@ type Config struct {
 		User     string `yaml:"user" env:"DB_USER" env-default:"postgres"`
 		Password string `yaml:"password" env:"DB_PASSWORD"`
 	} `yaml:"database"`
+	Redis struct {
+		Addr     string `yaml:"addr" env:"REDIS_ADDR" env-default:"localhost:6379"`
+		Password string `yaml:"password" env:"REDIS_PASSWORD"`
+	} `yaml:"redis"`
 }
 
 func (c *Config) DatabaseDSN() string {

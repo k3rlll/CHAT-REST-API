@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	domUser "main/internal/domain/user"
 	"main/internal/pkg/customerrors"
+	mwMiddleware "main/internal/server/middleware"
 	srvAuth "main/internal/service/auth"
 	srvChat "main/internal/service/chat"
 	srvMessage "main/internal/service/message"
@@ -46,10 +47,10 @@ func (h *UserHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/registration", h.RegisterHandler)
 	r.Get("/search", h.usersSearchWS)
 
-	// r.Group(func(r chi.Router) {
-	// 	r.Use(mwLogger.JWTAuth)
-	// 	r.Get("/search", h.usersSearchWS)
-	// })
+	r.Group(func(r chi.Router) {
+		r.Use(mwMiddleware.JWTAuth(Manager.Exists(), Manager.Parse()))
+		r.Get("/search", h.usersSearchWS)
+	})
 }
 
 func (h *UserHandler) usersSearchWS(w http.ResponseWriter, r *http.Request) {
@@ -83,10 +84,7 @@ func (h *UserHandler) usersSearchWS(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if len(result) > 0 {
-			h.logger.Info("users search results retrieved successfully",
-				slog.Int("count", len(result)),
-				slog.String("first_user_username", result[0].Nickname),
-				slog.String("first_user_id", result[0].Username))
+			h.logger.Info("users search results retrieved successfully", slog.String("handler", "usersSearchWS"))
 		} else {
 			h.logger.Info("no users found", slog.String("handler", "usersSearchWS"))
 		}
@@ -108,7 +106,7 @@ func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid request payload", http.StatusBadRequest)
 		return
 	}
-	createdUser, err := h.UserSrv.RegisterUser(r.Context(), u.Username, u.Nickname, u.Email, u.Password)
+	createdUser, err := h.UserSrv.RegisterUser(r.Context(), u.Username, u.Email, u.Password)
 	if err != nil {
 		if errors.Is(err, customerrors.ErrInvalidPassword) {
 			http.Error(w, "Password does not meet complexity requirements", http.StatusUnprocessableEntity)

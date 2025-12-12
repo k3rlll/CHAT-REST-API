@@ -4,12 +4,11 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"main/internal/pkg/customerrors"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
-
-
 
 type Claims struct {
 	mysecretkey string
@@ -17,7 +16,7 @@ type Claims struct {
 
 func NewClaims(mysecretkey string) (*Claims, error) {
 	if mysecretkey == "" {
-		fmt.Errorf("MYSECRETKEY is not set")
+		return nil, fmt.Errorf("MYSECRETKEY is not set: %w", customerrors.ErrSecretKeyNotSet)
 	}
 	return &Claims{mysecretkey: mysecretkey}, nil
 }
@@ -67,3 +66,5 @@ func (c *Claims) Parse(accessToken string) (int64, error) {
 	}
 	return int64(sub), nil
 }
+
+

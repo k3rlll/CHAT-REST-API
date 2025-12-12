@@ -44,3 +44,14 @@ func (c *Cache) Delete(ctx context.Context, key string) error {
 	}
 	return nil
 }
+
+func (c *Cache) Exists(ctx context.Context, token string) (bool, error) {
+
+	key := fmt.Sprintf("blacklist:%s", token)
+
+	result, err := c.Client.Exists(ctx, key).Result()
+	if err != nil {
+		return false, fmt.Errorf("failed to check existence in redis: %w", err)
+	}
+	return result > 0, nil
+}

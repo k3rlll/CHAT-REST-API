@@ -41,11 +41,11 @@ func (c *ChatRepository) CreateChat(ctx context.Context,
 	var chatId int64
 	var username string
 
-	if len(membersID) ==1 {
-		_, err:= c.pool.Exec(ctx,
+	if len(membersID) == 1 {
+		_, err := c.pool.Exec(ctx,
 			"select username from users where user_id=$1", membersID[0])
 		if err != nil {
-			c.logger.Error("failed to get username by userID", err.Error())
+
 			return 0, err
 		}
 	}
@@ -54,14 +54,12 @@ func (c *ChatRepository) CreateChat(ctx context.Context,
 		err := c.pool.QueryRow(ctx,
 			"SELECT username FROM users WHERE user_id=$1", membersID[1]).Scan(&username)
 		if err != nil {
-			c.logger.Error("failed to get nickname by username", err.Error())
 			return 0, err
 		}
 	}
 
 	tx, err := c.pool.Begin(ctx)
 	if err != nil {
-		c.logger.Error("failed to begin transaction", err.Error())
 		return 0, err
 	}
 	defer tx.Rollback(ctx)
@@ -69,7 +67,6 @@ func (c *ChatRepository) CreateChat(ctx context.Context,
 	err = tx.QueryRow(ctx,
 		"INSERT INTO chats (title, is_private) VALUES ($1, $2) RETURNING id", title, isPrivate).Scan(&chatId)
 	if err != nil {
-		c.logger.Error("failed to create a chat", err.Error())
 		return 0, err
 	}
 
@@ -77,13 +74,11 @@ func (c *ChatRepository) CreateChat(ctx context.Context,
 		_, err := tx.Exec(ctx,
 			"INSERT INTO chat_members (chat_id, user_id) VALUES ($1, $2)", chatId, userID)
 		if err != nil {
-			c.logger.Error("failed to add users to chat", err.Error())
 			return 0, err
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		c.logger.Error("failed to commit transaction", err.Error())
 		return 0, err
 	}
 
@@ -135,9 +130,15 @@ func (c *ChatRepository) GetChatDetails(ctx context.Context, chatID int64) (domC
 
 	var chat domChat.Chat
 	query := "SELECT id, title, is_private, created_at, members, members_usernames, members_count FROM chats WHERE id=$1"
-	err := c.pool.QueryRow(ctx, query, chatID).Scan(&chat.Id, &chat.Title, &chat.IsPrivate, &chat.CreatedAt, &chat.Members, &chat.MembersUsernames, &chat.MembersCount)
+	err := c.pool.QueryRow(ctx, query, chatID).Scan(
+		&chat.Id,
+		&chat.Title,
+		&chat.IsPrivate,
+		&chat.CreatedAt,
+		&chat.MembersID,
+		&chat.MembersUsernames,
+		&chat.MembersCount)
 	if err != nil {
-		c.logger.Error("failed to get chat details", err.Error())
 		return domChat.Chat{}, err
 	}
 	return domChat.Chat{
@@ -145,7 +146,7 @@ func (c *ChatRepository) GetChatDetails(ctx context.Context, chatID int64) (domC
 		Title:            chat.Title,
 		IsPrivate:        chat.IsPrivate,
 		CreatedAt:        chat.CreatedAt,
-		Members:          chat.Members,
+		MembersID:        chat.MembersID,
 		MembersUsernames: chat.MembersUsernames,
 		MembersCount:     chat.MembersCount,
 	}, nil
@@ -172,7 +173,6 @@ func (c *ChatRepository) OpenChat(ctx context.Context, chatID int64, userID int6
 			&message.SenderUsername,
 			&message.Text,
 			&message.CreatedAt); err != nil {
-			c.logger.Error("failed to scan message", err.Error())
 			return nil, err
 		}
 		messages = append(messages, message)
@@ -188,7 +188,6 @@ func (c *ChatRepository) AddMembers(ctx context.Context, chatID int64, members [
 		_, err := c.pool.Exec(ctx,
 			"INSERT INTO chat_members (chat_id, user_id) VALUES ($1, $2)", chatID, userID)
 		if err != nil {
-			c.logger.Error("failed to add member to chat", err.Error())
 			return err
 		}
 	}
@@ -197,8 +196,9 @@ func (c *ChatRepository) AddMembers(ctx context.Context, chatID int64, members [
 
 func (c *ChatRepository) UserInChat(ctx context.Context, chatID int64, userID int64) (bool, error) {
 	isMember := false
+	query := "SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2)"
 	err := c.pool.QueryRow(ctx,
-		"SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2)", chatID, userID).Scan(&isMember)
+		query, chatID, userID).Scan(&isMember)
 	return isMember, err
 }
 
