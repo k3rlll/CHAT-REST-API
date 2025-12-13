@@ -9,6 +9,24 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
+type EnvConfig struct {
+	ConfigPath string `env:"CONFIG_PATH"`
+	secretKey  string `env:"MY_SECRET_KEY"`
+}
+
+func (e *EnvConfig) MySecretKey() string {
+	return e.secretKey
+}
+
+func MySecretKey() string {
+	envConfig := &EnvConfig{}
+	err := cleanenv.ReadEnv(envConfig)
+	if err != nil {
+		panic("cannot read env variables: " + err.Error())
+	}
+	return envConfig.MySecretKey()
+}
+
 type HTTPServer struct {
 	Port        int           `yaml:"port" env:"SERVER_PORT" env-default:"8082"`
 	Mode        string        `yaml:"mode" env:"SERVER_MODE" env-default:"debug"`

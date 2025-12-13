@@ -4,11 +4,15 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+
 	"main/internal/pkg/customerrors"
+	
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
+
+
 
 type Claims struct {
 	mysecretkey string
@@ -66,5 +70,3 @@ func (c *Claims) Parse(accessToken string) (int64, error) {
 	}
 	return int64(sub), nil
 }
-
-

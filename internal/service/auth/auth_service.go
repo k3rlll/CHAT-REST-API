@@ -6,6 +6,7 @@ import (
 	db "main/internal/domain/auth"
 	"time"
 
+	rdb "main/internal/database/redis"
 	customerrors "main/internal/pkg/customerrors"
 	jwt "main/internal/pkg/jwt"
 	"main/internal/pkg/utils"
@@ -18,6 +19,18 @@ type AuthService struct {
 	jwt    Token
 	Repo   db.AuthInterface
 	Logger *slog.Logger
+}
+
+type JWTFacade struct {
+	Parser    *jwt.Claims
+	redisRepo *rdb.Cache
+}
+
+func NewJWTFacade(parser *jwt.Claims, redisRepo *rdb.Cache) *JWTFacade {
+	return &JWTFacade{
+		Parser:    parser,
+		redisRepo: redisRepo,
+	}
 }
 
 type Token interface {

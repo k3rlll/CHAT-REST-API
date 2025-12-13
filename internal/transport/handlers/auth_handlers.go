@@ -20,16 +20,18 @@ type AuthHandler struct {
 	UserSrv *srvUser.UserService
 	AuthSrv *srvAuth.AuthService
 	logger  *slog.Logger
-	Manager mwMiddleware.Manager
+	Manager mwMiddleware.JWTManager
 }
 
 func NewAuthHandler(
 	userSrv *srvUser.UserService,
 	authSrv *srvAuth.AuthService,
+	tokenManager mwMiddleware.JWTManager,
 	logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{
 		UserSrv: userSrv,
 		AuthSrv: authSrv,
+		Manager: tokenManager,
 		logger:  logger,
 	}
 }
@@ -39,7 +41,7 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/login", h.LoginHandler)
 
 	r.Group(func(r chi.Router) {
-		r.Use(mwMiddleware.JWTAuth(h.Manager, h.Manager))
+		r.Use(mwMiddleware.JWTAuth(h.Manager))
 		r.Post("/logout", h.LogoutHandler)
 	})
 }

@@ -22,7 +22,7 @@ type MessageHandler struct {
 	ChatSrv  *srvChat.ChatService
 	upgrader websocket.Upgrader
 	logger   *slog.Logger
-	Manager  mwMiddleware.Manager
+	Manager  mwMiddleware.JWTManager
 }
 
 func NewMessageHandler(userSrv *srvUser.UserService,
@@ -30,8 +30,7 @@ func NewMessageHandler(userSrv *srvUser.UserService,
 	messSrv *srvMessage.MessageService,
 	chatSrv *srvChat.ChatService,
 	logger *slog.Logger,
-	Manager mwMiddleware.Manager,
-
+	tokenManager mwMiddleware.JWTManager,
 ) *MessageHandler {
 	return &MessageHandler{
 		UserSrv:  userSrv,
@@ -40,7 +39,7 @@ func NewMessageHandler(userSrv *srvUser.UserService,
 		ChatSrv:  chatSrv,
 		upgrader: websocket.Upgrader{},
 		logger:   logger,
-		Manager:  Manager,
+		Manager:  tokenManager,
 	}
 }
 
@@ -48,7 +47,7 @@ func NewMessageHandler(userSrv *srvUser.UserService,
 func (h *MessageHandler) RegisterRoutes(r chi.Router) {
 
 	r.Group(func(r chi.Router) {
-		r.Use(mwMiddleware.JWTAuth(h.Manager, h.Manager))
+		r.Use(mwMiddleware.JWTAuth(h.Manager))
 		r.Post("/", h.Send)
 		r.Delete("/{msg_id}", h.DeleteMessageHandler)
 		r.Get("/", h.ListMessageHandlers)

@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
-	"main/internal/config"
+	config "main/internal/config"
 	"net"
 	"net/http"
 	"os"
@@ -18,6 +18,7 @@ import (
 	msg "main/internal/database/postgres/message_repo"
 	user "main/internal/database/postgres/user_repo"
 	rdb "main/internal/database/redis"
+	claims "main/internal/pkg/jwt"
 	mwMiddleware "main/internal/server/middleware"
 	srvAuth "main/internal/service/auth"
 	srvChat "main/internal/service/chat"
@@ -39,6 +40,7 @@ const (
 
 func main() {
 	cfg := config.MustLoadConfig()
+	secretKey := config.MySecretKey()
 
 	logger := setupLogger(cfg.Env)
 
@@ -46,6 +48,12 @@ func main() {
 	addr := net.JoinHostPort(cfg.Server.Host, strconv.Itoa(cfg.Server.Port))
 
 	router := chi.NewRouter()
+
+	NewClaims, err := claims.NewClaims(cfg.MySecretKey)
+	if err != nil {
+		logger.Error("failed to create JWT claims", slog.String("error", err.Error()))
+		return
+	}
 
 	dbConn, err := psql.NewDBPool(cfg.DatabaseDSN())
 	if err != nil {
@@ -65,11 +73,14 @@ func main() {
 	}
 	defer redis.Close()
 
+	NewCache := rdb.NewCache(redis)
+
 	authRepo := auth.NewAuthRepository(dbConn, logger)
 	userRepo := user.NewUserRepository(dbConn, logger)
 	chatRepo := chat.NewChatRepository(dbConn, logger)
 	msgRepo := msg.NewMessageRepository(dbConn, logger)
 	jwtService := srvAuth.NewTokenService()
+	NewJWTFacade := srvAuth.NewJWTFacade(NewClaims, *NewCache)
 
 	userService := srvUser.NewUserService(userRepo, logger)
 	authService := srvAuth.NewAuthService(authRepo, logger, jwtService, redis)
@@ -99,10 +110,10 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	userHandler := httpHandler.NewUserHandler(userService, authService, messageService, chatService, upgrader, logger)
+	userHandler := httpHandler.NewUserHandler(userService, authService, messageService, chatService, upgrader, NewJWTFacade, logger)
 	authHandler := httpHandler.NewAuthHandler(userService, authService, logger)
-	chatHandler := httpHandler.NewChatHandler(userService, authService, messageService, chatService, logger )
-	messageHandler := httpHandler.NewMessageHandler(userService, authService, messageService, chatService, logger )
+	chatHandler := httpHandler.NewChatHandler(userService, authService, messageService, chatService, logger)
+	messageHandler := httpHandler.NewMessageHandler(userService, authService, messageService, chatService, logger)
 
 	HTTP := httpHandler.NewHTTPHandler(userHandler, authHandler, chatHandler, messageHandler, logger)
 

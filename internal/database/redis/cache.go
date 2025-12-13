@@ -21,7 +21,7 @@ func NewCache(client *redis.Client) *Cache {
 func (c *Cache) Set(ctx context.Context, key string, value interface{}, ttlSeconds int) error {
 	err := c.Client.Set(ctx, key, value, time.Duration(ttlSeconds)*time.Second).Err()
 	if err != nil {
-		fmt.Errorf("failed to get from redis: %w", err)
+		return fmt.Errorf("failed to set in redis: %w", err)
 	}
 	return nil
 }

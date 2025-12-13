@@ -18,12 +18,13 @@ import (
 )
 
 type UserHandler struct {
-	UserSrv  *srvUser.UserService
-	AuthSrv  *srvAuth.AuthService
-	MessSrv  *srvMessage.MessageService
-	ChatSrv  *srvChat.ChatService
-	upgrader websocket.Upgrader
-	logger   *slog.Logger
+	UserSrv      *srvUser.UserService
+	AuthSrv      *srvAuth.AuthService
+	MessSrv      *srvMessage.MessageService
+	ChatSrv      *srvChat.ChatService
+	upgrader     websocket.Upgrader
+	tokenManager mwMiddleware.JWTManager
+	logger       *slog.Logger
 }
 
 func NewUserHandler(userSrv *srvUser.UserService,
@@ -31,14 +32,16 @@ func NewUserHandler(userSrv *srvUser.UserService,
 	messSrv *srvMessage.MessageService,
 	chatSrv *srvChat.ChatService,
 	upgrader websocket.Upgrader,
+	tokenManager mwMiddleware.JWTManager,
 	logger *slog.Logger) *UserHandler {
 	return &UserHandler{
-		UserSrv:  userSrv,
-		AuthSrv:  authSrv,
-		MessSrv:  messSrv,
-		ChatSrv:  chatSrv,
-		upgrader: websocket.Upgrader{},
-		logger:   logger,
+		UserSrv:      userSrv,
+		AuthSrv:      authSrv,
+		MessSrv:      messSrv,
+		ChatSrv:      chatSrv,
+		upgrader:     websocket.Upgrader{},
+		tokenManager: tokenManager,
+		logger:       logger,
 	}
 }
 
@@ -48,7 +51,7 @@ func (h *UserHandler) RegisterRoutes(r chi.Router) {
 	r.Get("/search", h.usersSearchWS)
 
 	r.Group(func(r chi.Router) {
-		r.Use(mwMiddleware.JWTAuth(Manager.Exists(), Manager.Parse()))
+		r.Use(mwMiddleware.JWTAuth(h.tokenManager))
 		r.Get("/search", h.usersSearchWS)
 	})
 }

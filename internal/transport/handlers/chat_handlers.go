@@ -21,7 +21,7 @@ type ChatHandler struct {
 	MessSrv *srvMessage.MessageService
 	ChatSrv *srvChat.ChatService
 	logger  *slog.Logger
-	Manager mwMiddleware.Manager
+	Manager mwMiddleware.JWTManager
 }
 
 func NewChatHandler(userSrv *srvUser.UserService,
@@ -29,7 +29,7 @@ func NewChatHandler(userSrv *srvUser.UserService,
 	messSrv *srvMessage.MessageService,
 	chatSrv *srvChat.ChatService,
 	logger *slog.Logger,
-	Manager mwMiddleware.Manager,
+	tokenManager mwMiddleware.JWTManager,
 ) *ChatHandler {
 	return &ChatHandler{
 		UserSrv: userSrv,
@@ -37,14 +37,14 @@ func NewChatHandler(userSrv *srvUser.UserService,
 		MessSrv: messSrv,
 		ChatSrv: chatSrv,
 		logger:  logger,
-		Manager: Manager,
+		Manager: tokenManager,
 	}
 }
 
 // все пути относительно /chats
 func (h *ChatHandler) RegisterRoutes(r chi.Router) {
 	r.Group(func(r chi.Router) {
-		r.Use(mwMiddleware.JWTAuth(h.Manager, h.Manager))
+		r.Use(mwMiddleware.JWTAuth(h.Manager))
 		r.Post("/", h.CreateChatHandler)
 		r.Get("/", h.GetChatsHandler)
 		r.Get("/{id}", h.OpenChatHandler)
