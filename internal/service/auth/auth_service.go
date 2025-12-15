@@ -2,35 +2,34 @@ package auth
 
 import (
 	"context"
-	"log/slog"
-	db "main/internal/domain/auth"
-	"time"
-
+	"fmt"
 	rdb "main/internal/database/redis"
+	db "main/internal/domain/user"
 	customerrors "main/internal/pkg/customerrors"
 	jwt "main/internal/pkg/jwt"
-	"main/internal/pkg/utils"
-
-	"github.com/go-redis/redis/v8"
+	"time"
 )
-
-type AuthService struct {
-	redis  *redis.Client
-	jwt    Token
-	Repo   db.AuthInterface
-	Logger *slog.Logger
-}
 
 type JWTFacade struct {
 	Parser    *jwt.Claims
 	redisRepo *rdb.Cache
 }
 
-func NewJWTFacade(parser *jwt.Claims, redisRepo *rdb.Cache) *JWTFacade {
-	return &JWTFacade{
-		Parser:    parser,
-		redisRepo: redisRepo,
-	}
+type AuthService struct {
+	redis SetInterface
+	jwt   Token
+	Repo  AuthRepository
+}
+
+type AuthRepository interface {
+	GetPasswordHash(ctx context.Context, refreshToken string, userID int64, password string) (db.User, error)
+	SaveRefreshToken(ctx context.Context, userID int64, refreshToken string) error
+	DeleteRefreshToken(ctx context.Context, userID int64) error
+	CheckPasswordHash(password, hash string) bool
+}
+
+type SetInterface interface {
+	Set(ctx context.Context, key string, value interface{}, ttlSeconds int) error
 }
 
 type Token interface {
@@ -42,12 +41,18 @@ func NewTokenService() Token {
 	return &jwt.Claims{}
 }
 
-func NewAuthService(repo db.AuthInterface, logger *slog.Logger, jwt Token, redis *redis.Client) *AuthService {
+func NewAuthService(repo AuthRepository, jwt Token, redis SetInterface) *AuthService {
 	return &AuthService{
-		redis:  redis,
-		jwt:    jwt,
-		Repo:   repo,
-		Logger: logger,
+		redis: redis,
+		jwt:   jwt,
+		Repo:  repo,
+	}
+}
+
+func NewJWTFacade(parser *jwt.Claims, redisRepo *rdb.Cache) *JWTFacade {
+	return &JWTFacade{
+		Parser:    parser,
+		redisRepo: redisRepo,
 	}
 }
 
@@ -58,12 +63,12 @@ func (s *AuthService) LoginUser(ctx context.Context,
 	RefreshToken string,
 	err error) {
 
-	user, err := s.Repo.Login(ctx, RefreshToken, userID, password)
+	user, err := s.Repo.GetPasswordHash(ctx, RefreshToken, userID, password)
 	if err != nil {
 		return "", "", err
 	}
 
-	if !utils.CheckPasswordHash(password, user.Password) {
+	if !s.Repo.CheckPasswordHash(password, user.Password) {
 		return "", "", customerrors.ErrInvalidNicknameOrPassword
 	}
 
@@ -87,12 +92,23 @@ func (s *AuthService) LoginUser(ctx context.Context,
 
 func (s *AuthService) LogoutUser(ctx context.Context, userID int64, accessToken string) error {
 
-	s.redis.Set(ctx, accessToken, "blacklist", time.Minute*15)
-
-	err := s.Repo.DeleteRefreshToken(ctx, userID)
+	err := s.redis.Set(ctx, accessToken, "blacklist", 60*15)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to blacklist access token: %w", err)
+	}
+
+	err = s.Repo.DeleteRefreshToken(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete refresh token: %w", err)
 	}
 
 	return nil
+}
+
+func (j *JWTFacade) Parse(accessToken string) (int64, error) {
+	return j.Parser.Parse(accessToken)
+}
+
+func (j *JWTFacade) Exists(ctx context.Context, token string) (bool, error) {
+	return j.redisRepo.Exists(ctx, token)
 }

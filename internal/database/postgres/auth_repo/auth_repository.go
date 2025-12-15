@@ -46,7 +46,7 @@ func (t *AuthRepository) GetByEmail(ctx context.Context, email string) (domUser.
 	return user, nil
 }
 
-func (t *AuthRepository) Login(ctx context.Context,
+func (t *AuthRepository) GetPasswordHash(ctx context.Context,
 	RefreshToken string,
 	userID int64,
 	password string) (domUser.User, error) {

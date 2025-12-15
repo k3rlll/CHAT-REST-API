@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	domChat "main/internal/domain/chat"
 	domMessage "main/internal/domain/message"
@@ -26,8 +27,7 @@ func (c *ChatRepository) CheckIsMemberOfChat(ctx context.Context, chatID int64, 
 	err := c.pool.QueryRow(ctx,
 		"SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2)", chatID, userID).Scan(&isMember)
 	if err != nil {
-		c.logger.Error("failed to check if user is a member of the chat", err)
-		return false, err
+		return false, fmt.Errorf("error checking membership: %w", err)
 	}
 	return isMember, nil
 
@@ -46,7 +46,7 @@ func (c *ChatRepository) CreateChat(ctx context.Context,
 			"select username from users where user_id=$1", membersID[0])
 		if err != nil {
 
-			return 0, err
+			return 0, fmt.Errorf("failed to select username: %w", err)
 		}
 	}
 
@@ -54,32 +54,32 @@ func (c *ChatRepository) CreateChat(ctx context.Context,
 		err := c.pool.QueryRow(ctx,
 			"SELECT username FROM users WHERE user_id=$1", membersID[1]).Scan(&username)
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("failed to select username: %w", err)
 		}
 	}
 
 	tx, err := c.pool.Begin(ctx)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
 	err = tx.QueryRow(ctx,
 		"INSERT INTO chats (title, is_private) VALUES ($1, $2) RETURNING id", title, isPrivate).Scan(&chatId)
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to insert chat: %w", err)
 	}
 
 	for _, userID := range membersID {
 		_, err := tx.Exec(ctx,
 			"INSERT INTO chat_members (chat_id, user_id) VALUES ($1, $2)", chatId, userID)
 		if err != nil {
-			return 0, err
+			return 0, fmt.Errorf("failed to insert chat member: %w", err)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return 0, err
+		return 0, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return chatId, nil
@@ -106,20 +106,20 @@ func (c *ChatRepository) ListOfChats(ctx context.Context, userID int64) ([]domCh
 
 	rows, err := c.pool.Query(ctx, query, userID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to select titles of chats: %w", err)
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var chat domChat.Chat
 		if err := rows.Scan(&chat.Title); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to scan rows: %w", err)
 		}
 		chats = append(chats, chat)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("rows iteration error: %w", err)
 	}
 
 	return chats, nil
@@ -139,7 +139,7 @@ func (c *ChatRepository) GetChatDetails(ctx context.Context, chatID int64) (domC
 		&chat.MembersUsernames,
 		&chat.MembersCount)
 	if err != nil {
-		return domChat.Chat{}, err
+		return domChat.Chat{}, fmt.Errorf("failed to select chat details: %w", err)
 	}
 	return domChat.Chat{
 		Id:               chat.Id,
@@ -161,7 +161,7 @@ func (c *ChatRepository) OpenChat(ctx context.Context, chatID int64, userID int6
 			"WHERE chat_members.user_id = $1 AND messages.chat_id = $2 "+
 			"ORDER BY messages.created_at DESC", userID, chatID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("repository: failed to select messages: %w", err)
 	}
 
 	messages := []domMessage.Message{}
@@ -173,7 +173,7 @@ func (c *ChatRepository) OpenChat(ctx context.Context, chatID int64, userID int6
 			&message.SenderUsername,
 			&message.Text,
 			&message.CreatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("repository: failed to scan message: %w", err)
 		}
 		messages = append(messages, message)
 	}
@@ -188,7 +188,7 @@ func (c *ChatRepository) AddMembers(ctx context.Context, chatID int64, members [
 		_, err := c.pool.Exec(ctx,
 			"INSERT INTO chat_members (chat_id, user_id) VALUES ($1, $2)", chatID, userID)
 		if err != nil {
-			return err
+			return fmt.Errorf("repository: failed to insert chat member: %w", err)
 		}
 	}
 	return nil
