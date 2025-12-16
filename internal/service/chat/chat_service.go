@@ -13,13 +13,13 @@ import (
 
 type ChatService struct {
 	User   domUser.UserInterface
-	Chat   dom.ChatInterface
+	Chat   ChatInterface
 	Logger *slog.Logger
 }
 
 type ChatInterface interface {
-	GetChatDetails(ctx context.Context, chatID int64) (Chat, error)
-	ListOfChats(ctx context.Context, userID int64) ([]Chat, error)
+	GetChatDetails(ctx context.Context, chatID int64) (dom.Chat, error)
+	ListOfChats(ctx context.Context, userID int64) ([]dom.Chat, error)
 	CheckIfChatExists(ctx context.Context, chatID int64) (bool, error)
 	DeleteChat(ctx context.Context, chatID int64) error
 	CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (int64, error)
@@ -29,7 +29,7 @@ type ChatInterface interface {
 	UserInChat(ctx context.Context, chatID int64, userID int64) (bool, error)
 }
 
-func NewChatService(user domUser.UserInterface, chat dom.ChatInterface, logger *slog.Logger) *ChatService {
+func NewChatService(user domUser.UserInterface, chat ChatInterface, logger *slog.Logger) *ChatService {
 	return &ChatService{
 		User:   user,
 		Chat:   chat,

@@ -70,7 +70,7 @@ func (s *AuthService) LoginUser(ctx context.Context,
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		return "", "", customerrors.ErrInvalidNicknameOrPassword
+		return "", "", customerrors.ErrInvalidInput
 	}
 
 	AccessToken, err = s.jwt.NewAccessToken(userID, time.Minute*15)

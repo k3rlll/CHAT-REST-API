@@ -65,7 +65,7 @@ func (m *MessageService) DeleteMessage(ctx context.Context, messageID int64) err
 func (m *MessageService) Edit(ctx context.Context, messageID int64, newText string) error {
 	if newText == "" {
 		m.Logger.Error("new message text is empty")
-		return customerrors.ErrMessageIsEmpty
+		return customerrors.ErrInvalidInput
 	}
 	exists, err := m.Message.CheckMessageExists(ctx, messageID)
 	if err != nil {

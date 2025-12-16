@@ -55,7 +55,7 @@ func (t *AuthRepository) GetPasswordHash(ctx context.Context,
 	err := t.pool.QueryRow(ctx,
 		"SELECT password_hash FROM users WHERE id=$1", userID).Scan(&passwordHash)
 	if err != nil {
-		return domUser.User{}, customerrors.ErrInvalidNicknameOrPassword
+		return domUser.User{}, customerrors.ErrInvalidInput
 	}
 	var user domUser.User
 	user.ID = userID
