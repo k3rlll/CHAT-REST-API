@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	dom "main/internal/domain/chat"
 	domMessage "main/internal/domain/message"
@@ -14,6 +15,18 @@ type ChatService struct {
 	User   domUser.UserInterface
 	Chat   dom.ChatInterface
 	Logger *slog.Logger
+}
+
+type ChatInterface interface {
+	GetChatDetails(ctx context.Context, chatID int64) (Chat, error)
+	ListOfChats(ctx context.Context, userID int64) ([]Chat, error)
+	CheckIfChatExists(ctx context.Context, chatID int64) (bool, error)
+	DeleteChat(ctx context.Context, chatID int64) error
+	CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (int64, error)
+	CheckIsMemberOfChat(ctx context.Context, chatID int64, userID int64) (bool, error)
+	OpenChat(ctx context.Context, chatID int64, userID int64) ([]domMessage.Message, error)
+	AddMembers(ctx context.Context, chatID int64, members []int64) error
+	UserInChat(ctx context.Context, chatID int64, userID int64) (bool, error)
 }
 
 func NewChatService(user domUser.UserInterface, chat dom.ChatInterface, logger *slog.Logger) *ChatService {
@@ -28,13 +41,11 @@ func (c *ChatService) CreateChat(ctx context.Context,
 	title string,
 	members []int64) (dom.Chat, error) {
 	if title == "" {
-		c.Logger.Info("title is empty", errors.New("title cannot be empty"))
-		return dom.Chat{}, errors.New("title cannot be empty")
+		return dom.Chat{}, fmt.Errorf("chat service:chat title cannot be empty: %w", customerrors.ErrInvalidInput)
 	}
 
 	chat_id, err := c.Chat.CreateChat(ctx, title, isPrivate, members)
 	if err != nil {
-		c.Logger.Error("failed to create chat", err.Error())
 		return dom.Chat{}, err
 	}
 
@@ -130,7 +141,7 @@ func (c *ChatService) OpenChat(ctx context.Context,
 func (c *ChatService) AddMembers(ctx context.Context, chatID int64, userID int64, members []int64) error {
 	if !c.User.CheckUserExists(ctx, userID) {
 		c.Logger.Info("user does not exist", nil)
-		return customerrors.ErrUserDoesNotExist
+		return customerrors.ErrUserNotFound
 	}
 
 	inChat, err := c.Chat.UserInChat(ctx, chatID, userID)

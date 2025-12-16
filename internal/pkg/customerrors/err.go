@@ -19,4 +19,5 @@ var (
 	ErrSecretKeyNotSet           = errors.New("secret key is not set")
 	ErrFailedToSaveToken         = errors.New("failed to save token")
 	ErrTokenCreationFailed       = errors.New("token creation failed")
+	ErrRedisFailed               = errors.New("redis failed")
 )

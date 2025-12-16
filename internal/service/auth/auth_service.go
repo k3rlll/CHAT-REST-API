@@ -8,6 +8,8 @@ import (
 	customerrors "main/internal/pkg/customerrors"
 	jwt "main/internal/pkg/jwt"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 type JWTFacade struct {
@@ -25,7 +27,6 @@ type AuthRepository interface {
 	GetPasswordHash(ctx context.Context, refreshToken string, userID int64, password string) (db.User, error)
 	SaveRefreshToken(ctx context.Context, userID int64, refreshToken string) error
 	DeleteRefreshToken(ctx context.Context, userID int64) error
-	CheckPasswordHash(password, hash string) bool
 }
 
 type SetInterface interface {
@@ -68,7 +69,7 @@ func (s *AuthService) LoginUser(ctx context.Context,
 		return "", "", err
 	}
 
-	if !s.Repo.CheckPasswordHash(password, user.Password) {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 		return "", "", customerrors.ErrInvalidNicknameOrPassword
 	}
 

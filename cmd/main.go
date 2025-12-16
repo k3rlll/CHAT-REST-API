@@ -83,7 +83,7 @@ func main() {
 	NewJWTFacade := srvAuth.NewJWTFacade(NewClaims, NewCache)
 
 	userService := srvUser.NewUserService(userRepo, logger)
-	authService := srvAuth.NewAuthService(authRepo, logger, jwtService, redis)
+	authService := srvAuth.NewAuthService(authRepo, jwtService, NewCache)
 	chatService := srvChat.NewChatService(userRepo, chatRepo, logger)
 	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, logger)
 

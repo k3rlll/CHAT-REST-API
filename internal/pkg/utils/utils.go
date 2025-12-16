@@ -13,10 +13,6 @@ func containsUppercase(s string) bool {
 	return false
 }
 
-func CheckPasswordHash(password, hash string) bool {
-	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
-	return err == nil // если пароли совпадают, вернется nil
-}
 
 func ValidatePassword(password string) bool {
 	if len(password) < 8 {

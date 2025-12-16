@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // ------- MockUserRepo implements the UserRepo interface for testing purposes.
@@ -39,14 +40,6 @@ func (m *MockAuthRepo) DeleteRefreshToken(ctx context.Context, userID int64) err
 		return nil
 	}
 	return args.Error(0)
-}
-
-func (m *MockAuthRepo) CheckPasswordHash(password, hash string) bool {
-	args := m.Called(password, hash)
-	if args.Get(0) == nil {
-		return false
-	}
-	return args.Bool(0)
 }
 
 // ------- MockRedis implements the Rdb interface for testing purposes.
@@ -85,10 +78,13 @@ func (m *MockToken) NewRefreshToken() (string, error) {
 
 // Testing code will be here
 func TestAuthService_LoginUser(t *testing.T) {
+
+	realHash, _ := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.MinCost)
+
 	testUser := dom.User{
 		ID:       1,
 		Username: "testuser",
-		Password: "hashedpassword",
+		Password: string(realHash), // Теперь тут валидный хэш
 	}
 
 	tests := []struct {
@@ -106,7 +102,6 @@ func TestAuthService_LoginUser(t *testing.T) {
 			password: "password",
 			mockBehavior: func(repo *MockAuthRepo, token *MockToken, redis *MockSet) {
 				repo.On("GetPasswordHash", mock.Anything, mock.Anything, int64(1), "password").Return(testUser, nil)
-				repo.On("CheckPasswordHash", "password", "hashedpassword").Return(true)
 				token.On("NewAccessToken", int64(1), mock.Anything).Return("access_token", nil)
 				token.On("NewRefreshToken").Return("refresh_token", nil)
 				repo.On("SaveRefreshToken", mock.Anything, int64(1), "refresh_token").Return(nil)
@@ -131,7 +126,6 @@ func TestAuthService_LoginUser(t *testing.T) {
 			password: "wrongpassword",
 			mockBehavior: func(repo *MockAuthRepo, token *MockToken, redis *MockSet) {
 				repo.On("GetPasswordHash", mock.Anything, mock.Anything, int64(1), "wrongpassword").Return(testUser, nil)
-				repo.On("CheckPasswordHash", "wrongpassword", "hashedpassword").Return(false)
 			},
 			expectAccessToken:  "",
 			expectRefreshToken: "",
@@ -142,7 +136,6 @@ func TestAuthService_LoginUser(t *testing.T) {
 			password: "password",
 			mockBehavior: func(repo *MockAuthRepo, token *MockToken, redis *MockSet) {
 				repo.On("GetPasswordHash", mock.Anything, mock.Anything, int64(1), "password").Return(testUser, nil)
-				repo.On("CheckPasswordHash", "password", "hashedpassword").Return(true)
 				token.On("NewAccessToken", int64(1), mock.Anything).Return("", customerrors.ErrTokenCreationFailed)
 			},
 			expectAccessToken:  "",
@@ -155,7 +148,6 @@ func TestAuthService_LoginUser(t *testing.T) {
 			password: "password",
 			mockBehavior: func(repo *MockAuthRepo, token *MockToken, redis *MockSet) {
 				repo.On("GetPasswordHash", mock.Anything, mock.Anything, int64(1), "password").Return(testUser, nil)
-				repo.On("CheckPasswordHash", "password", "hashedpassword").Return(true)
 				token.On("NewAccessToken", int64(1), mock.Anything).Return("access_token", nil)
 				token.On("NewRefreshToken").Return("refresh_token", nil)
 				repo.On("SaveRefreshToken", mock.Anything, int64(1), "refresh_token").Return(customerrors.ErrFailedToSaveToken)
@@ -177,20 +169,72 @@ func TestAuthService_LoginUser(t *testing.T) {
 			accessToken, refreshToken, err := authService.LoginUser(context.Background(), tt.userID, tt.password)
 
 			if tt.expectError {
-				if err == nil {
-					assert.Error(t, err, "expected an error but got none")
-					assert.Empty(t, accessToken, "expected empty access token")
-					assert.Empty(t, refreshToken, "expected empty refresh token")
-				} else {
-					assert.NotEmpty(t, err.Error(), "expected an error message")
-					assert.NoError(t, err, "did not expect an error")
-					assert.Equal(t, tt.expectAccessToken, accessToken, "access token does not match")
-					assert.Equal(t, tt.expectRefreshToken, refreshToken, "refresh token does not match")
-				}
+				assert.Error(t, err)
+				assert.Empty(t, accessToken)
+				assert.Empty(t, refreshToken)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectAccessToken, accessToken)
+				assert.Equal(t, tt.expectRefreshToken, refreshToken)
+			}
 
-				mockRepo.AssertExpectations(t)
-				mockToken.AssertExpectations(t)
-				mockRedis.AssertExpectations(t)
+			mockRepo.AssertExpectations(t)
+			mockToken.AssertExpectations(t)
+			mockRedis.AssertExpectations(t)
+		})
+	}
+}
+
+func TestAuthService_LogoutUser(t *testing.T) {
+	tests := []struct {
+		name         string
+		userID       int64
+		access_token string
+		mockBehavior func(repo *MockAuthRepo, redis *MockSet)
+		expectError  bool
+	}{
+		{
+			name:         "Successful logout",
+			userID:       1,
+			access_token: "access_token",
+			mockBehavior: func(repo *MockAuthRepo, redis *MockSet) {
+				redis.On("Set", mock.Anything, "access_token", "blacklist", 60*15).Return(nil)
+				repo.On("DeleteRefreshToken", mock.Anything, int64(1)).Return(nil)
+			},
+			expectError: false,
+		},
+		{
+			name:         "Failed to blacklist access token",
+			userID:       1,
+			access_token: "access_token",
+			mockBehavior: func(repo *MockAuthRepo, redis *MockSet) {
+				redis.On("Set", mock.Anything, "access_token", "blacklist", 60*15).Return(customerrors.ErrRedisFailed)
+			},
+			expectError: true,
+		},
+		{
+			name:         "Failed to delete refresh token",
+			userID:       1,
+			access_token: "access_token",
+			mockBehavior: func(repo *MockAuthRepo, redis *MockSet) {
+				redis.On("Set", mock.Anything, "access_token", "blacklist", 60*15).Return(nil)
+				repo.On("DeleteRefreshToken", mock.Anything, int64(1)).Return(customerrors.ErrFailedToSaveToken)
+			},
+			expectError: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockAuthRepo)
+			mockRedis := new(MockSet)
+			tt.mockBehavior(mockRepo, mockRedis)
+			authService := NewAuthService(mockRepo, nil, mockRedis)
+			err := authService.LogoutUser(context.Background(), tt.userID, tt.access_token)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
