@@ -7,8 +7,6 @@ import (
 	domUser "main/internal/domain/user"
 	"main/internal/pkg/customerrors"
 	mwMiddleware "main/internal/server/middleware"
-	srvAuth "main/internal/service/auth"
-	srvUser "main/internal/service/user"
 	"net/http"
 	"strconv"
 	"time"
@@ -17,16 +15,16 @@ import (
 )
 
 type AuthHandler struct {
-	UserSrv *srvUser.UserService
-	AuthSrv *srvAuth.AuthService
+	UserSrv UserService
+	AuthSrv AuthService
 	logger  *slog.Logger
-	Manager mwMiddleware.JWTManager
+	Manager JWTManager
 }
 
 func NewAuthHandler(
-	userSrv *srvUser.UserService,
-	authSrv *srvAuth.AuthService,
-	tokenManager mwMiddleware.JWTManager,
+	userSrv UserService,
+	authSrv AuthService,
+	tokenManager JWTManager,
 	logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{
 		UserSrv: userSrv,
@@ -37,7 +35,6 @@ func NewAuthHandler(
 }
 
 func (h *AuthHandler) RegisterRoutes(r chi.Router) {
-	// все пути относительно /auth
 	r.Post("/login", h.LoginHandler)
 
 	r.Group(func(r chi.Router) {
@@ -45,21 +42,6 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 		r.Post("/logout", h.LogoutHandler)
 	})
 }
-
-/*pattern: /v1/auth/login
-method:  POST
-info:    Логин по паролю, выдача токенов
-
-succeed:
-  - status code: 200 OK
-  - response body: JSON { user:{...}, access_token, refresh_token, issued_at }
-
-failed:
-  - status code: 400 Bad Request
-  - status code: 401 Unauthorized (неверные креды)
-  - status code: 429 Too Many Requests
-  - status code: 500 Internal Server Error
-  - response body: JSON error + time*/
 
 func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	var u domUser.User
@@ -72,7 +54,7 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 
 	AccessToken, RefreshToken, err := h.AuthSrv.LoginUser(r.Context(), u.ID, u.Password)
 	if err != nil {
-		if errors.Is(err, customerrors.ErrInvalidNicknameOrPassword) {
+		if errors.Is(err, customerrors.ErrInvalidInput) {
 			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
 			h.logger.Info("invalid login attempt", slog.String("user_id", strconv.FormatInt(u.ID, 10)))
 			return
@@ -98,21 +80,6 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-/*
-pattern: /v1/auth/logout
-method:  POST
-info:    Выход с текущей сессии (инвалидация refresh)
-
-succeed:
-  - status code: 204 No Content
-  - response body: пусто
-
-failed:
-  - status code: 401 Unauthorized
-  - status code: 500 Internal Server Error
-  - response body: JSON error + time
-*/
-
 func (h *AuthHandler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 
 	var user int64
@@ -136,19 +103,3 @@ func (h *AuthHandler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 }
-
-/*
-pattern: /v1/auth/logout-all
-method:  POST
-info:    Выход со всех устройств/сессий
-
-succeed:
-  - status code: 204 No Content
-  - response body: пусто
-
-failed:
-  - status code: 401 Unauthorized
-  - status code: 500 Internal Server Error
-  - response body: JSON error + time
-*/
-//TODO: implement logout from all devices

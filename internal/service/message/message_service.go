@@ -3,18 +3,30 @@ package service
 import (
 	"context"
 	"log/slog"
-	ch "main/internal/domain/chat"
+	dom "main/internal/domain/chat"
 	msg "main/internal/domain/message"
 	"main/internal/pkg/customerrors"
 )
 
+type ChatInterface interface {
+	GetChatDetails(ctx context.Context, chatID int64) (dom.Chat, error)
+	ListOfChats(ctx context.Context, userID int64) ([]dom.Chat, error)
+	CheckIfChatExists(ctx context.Context, chatID int64) (bool, error)
+	DeleteChat(ctx context.Context, chatID int64) error
+	CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (int64, error)
+	CheckIsMemberOfChat(ctx context.Context, chatID int64, userID int64) (bool, error)
+	OpenChat(ctx context.Context, chatID int64, userID int64) ([]msg.Message, error)
+	UserInChat(ctx context.Context, chatID int64, userID int64) (bool, error)
+	AddMembers(ctx context.Context, chatID int64, members []int64) error
+}
+
 type MessageService struct {
-	Chat    ch.ChatInterface
+	Chat    ChatInterface
 	Message msg.MessageInterface
 	Logger  *slog.Logger
 }
 
-func NewMessageService(chat ch.ChatInterface, message msg.MessageInterface, logger *slog.Logger) *MessageService {
+func NewMessageService(chat ChatInterface, message msg.MessageInterface, logger *slog.Logger) *MessageService {
 	return &MessageService{
 		Chat:    chat,
 		Message: message,

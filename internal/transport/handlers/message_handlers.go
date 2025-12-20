@@ -5,10 +5,6 @@ import (
 	"log/slog"
 	domMess "main/internal/domain/message"
 	mwMiddleware "main/internal/server/middleware"
-	srvAuth "main/internal/service/auth"
-	srvChat "main/internal/service/chat"
-	srvMessage "main/internal/service/message"
-	srvUser "main/internal/service/user"
 	"net/http"
 
 	"github.com/go-chi/chi"
@@ -16,21 +12,21 @@ import (
 )
 
 type MessageHandler struct {
-	UserSrv  *srvUser.UserService
-	AuthSrv  *srvAuth.AuthService
-	MessSrv  *srvMessage.MessageService
-	ChatSrv  *srvChat.ChatService
+	UserSrv  UserService
+	AuthSrv  AuthService
+	MessSrv  MessageService
+	ChatSrv  ChatService
 	upgrader websocket.Upgrader
 	logger   *slog.Logger
-	Manager  mwMiddleware.JWTManager
+	Manager  JWTManager
 }
 
-func NewMessageHandler(userSrv *srvUser.UserService,
-	authSrv *srvAuth.AuthService,
-	messSrv *srvMessage.MessageService,
-	chatSrv *srvChat.ChatService,
+func NewMessageHandler(userSrv UserService,
+	authSrv AuthService,
+	messSrv MessageService,
+	chatSrv ChatService,
 	logger *slog.Logger,
-	tokenManager mwMiddleware.JWTManager,
+	tokenManager JWTManager,
 ) *MessageHandler {
 	return &MessageHandler{
 		UserSrv:  userSrv,

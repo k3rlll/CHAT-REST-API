@@ -38,7 +38,7 @@ func (s *UserService) RegisterUser(ctx context.Context, username, email, passwor
 
 	if !utils.ValidatePassword(password) {
 		s.Logger.Error("password does not meet complexity requirements")
-		return dom.User{}, customerrors.ErrInvalidPassword
+		return dom.User{}, customerrors.ErrInvalidInput
 	}
 
 	passwordHash, err := utils.HashPassword(password)
@@ -66,7 +66,7 @@ func (s *UserService) SearchUser(ctx context.Context, message string) ([]dom.Use
 	q := strings.TrimSpace(message)
 	if q == "" {
 		s.Logger.Error("empty search query", slog.String("query", q))
-		return []dom.User{}, customerrors.ErrEmptyQuery
+		return []dom.User{}, customerrors.ErrInvalidInput
 	}
 
 	users, err := s.Repo.SearchUser(ctx, q)

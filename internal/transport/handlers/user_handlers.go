@@ -7,10 +7,6 @@ import (
 	domUser "main/internal/domain/user"
 	"main/internal/pkg/customerrors"
 	mwMiddleware "main/internal/server/middleware"
-	srvAuth "main/internal/service/auth"
-	srvChat "main/internal/service/chat"
-	srvMessage "main/internal/service/message"
-	srvUser "main/internal/service/user"
 	"net/http"
 
 	"github.com/go-chi/chi"
@@ -18,26 +14,23 @@ import (
 )
 
 type UserHandler struct {
-	UserSrv      *srvUser.UserService
-	AuthSrv      *srvAuth.AuthService
-	MessSrv      *srvMessage.MessageService
-	ChatSrv      *srvChat.ChatService
+	UserSrv      UserService
+	AuthSrv      AuthService
+	ChatSrv      ChatService
 	upgrader     websocket.Upgrader
-	tokenManager mwMiddleware.JWTManager
+	tokenManager JWTManager
 	logger       *slog.Logger
 }
 
-func NewUserHandler(userSrv *srvUser.UserService,
-	authSrv *srvAuth.AuthService,
-	messSrv *srvMessage.MessageService,
-	chatSrv *srvChat.ChatService,
+func NewUserHandler(userSrv UserService,
+	authSrv AuthService,
+	chatSrv ChatService,
 	upgrader websocket.Upgrader,
-	tokenManager mwMiddleware.JWTManager,
+	tokenManager JWTManager,
 	logger *slog.Logger) *UserHandler {
 	return &UserHandler{
 		UserSrv:      userSrv,
 		AuthSrv:      authSrv,
-		MessSrv:      messSrv,
 		ChatSrv:      chatSrv,
 		upgrader:     websocket.Upgrader{},
 		tokenManager: tokenManager,
@@ -111,7 +104,7 @@ func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	createdUser, err := h.UserSrv.RegisterUser(r.Context(), u.Username, u.Email, u.Password)
 	if err != nil {
-		if errors.Is(err, customerrors.ErrInvalidPassword) {
+		if errors.Is(err, customerrors.ErrInvalidInput) {
 			http.Error(w, "Password does not meet complexity requirements", http.StatusUnprocessableEntity)
 			h.logger.Info("invalid password during registration")
 		} else {

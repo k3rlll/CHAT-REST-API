@@ -6,9 +6,6 @@ import (
 	dom "main/internal/domain/chat"
 	"main/internal/pkg/customerrors"
 	mwMiddleware "main/internal/server/middleware"
-	srvAuth "main/internal/service/auth"
-	srvChat "main/internal/service/chat"
-	srvMessage "main/internal/service/message"
 	srvUser "main/internal/service/user"
 	"net/http"
 
@@ -16,20 +13,20 @@ import (
 )
 
 type ChatHandler struct {
-	UserSrv *srvUser.UserService
-	AuthSrv *srvAuth.AuthService
-	MessSrv *srvMessage.MessageService
-	ChatSrv *srvChat.ChatService
+	UserSrv UserService
+	AuthSrv AuthService
+	MessSrv MessageService
+	ChatSrv ChatService
 	logger  *slog.Logger
-	Manager mwMiddleware.JWTManager
+	Manager JWTManager
 }
 
 func NewChatHandler(userSrv *srvUser.UserService,
-	authSrv *srvAuth.AuthService,
-	messSrv *srvMessage.MessageService,
-	chatSrv *srvChat.ChatService,
+	authSrv AuthService,
+	messSrv MessageService,
+	chatSrv ChatService,
 	logger *slog.Logger,
-	tokenManager mwMiddleware.JWTManager,
+	tokenManager JWTManager,
 ) *ChatHandler {
 	return &ChatHandler{
 		UserSrv: userSrv,
@@ -128,9 +125,15 @@ func (h *ChatHandler) OpenChatHandler(w http.ResponseWriter, r *http.Request) {
 	chatID := requestData["chat_id"]
 	userID := requestData["user_id"]
 
-	details, messages, err := h.ChatSrv.OpenChat(r.Context(), chatID, userID)
+	messages, err := h.ChatSrv.OpenChat(r.Context(), chatID, userID)
 	if err != nil {
 		h.logger.Error("failed to open chat", slog.String("error", err.Error()))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	details, err := h.ChatSrv.GetChatDetails(r.Context(), chatID)
+	if err != nil {
+		h.logger.Error("failed to get chat details", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -249,7 +252,7 @@ func (h *ChatHandler) AddMembersHandler(w http.ResponseWriter, r *http.Request) 
 		if err == customerrors.ErrUserAlreadyInChat {
 			http.Error(w, "conflict", http.StatusConflict)
 			return
-		} else if err == customerrors.ErrUserDoesNotExist {
+		} else if err == customerrors.ErrInvalidInput {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		} else if err == customerrors.ErrUserNotMemberOfChat {

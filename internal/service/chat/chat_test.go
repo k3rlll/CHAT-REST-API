@@ -241,3 +241,92 @@ func TestChatService_DeleteChat(t *testing.T) {
 		})
 	}
 }
+
+func TestChatService_GetChatDetails(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	tests := []struct {
+		name         string
+		chatID       int64
+		userID       int64
+		mockBehavior func(r *MockChatRepo)
+		expectedChat domChat.Chat
+		expectError  bool
+	}{
+		{
+			name:   "Successful get chat details",
+			chatID: 1,
+			userID: 2,
+			mockBehavior: func(r *MockChatRepo) {
+				r.On("CheckIsMemberOfChat", mock.Anything, int64(1), int64(2)).
+					Return(true, nil)
+				r.On("GetChatDetails", mock.Anything, int64(1)).
+					Return(domChat.Chat{
+						Id:        1,
+						Title:     "Test Chat",
+						IsPrivate: false,
+						MembersID: []int64{2, 3, 4},
+					}, nil)
+			},
+			expectedChat: domChat.Chat{
+				Id:        1,
+				Title:     "Test Chat",
+				IsPrivate: false,
+				MembersID: []int64{2, 3, 4},
+			},
+			expectError: false,
+		}, {
+			name:   "User not a member of chat",
+			chatID: 1,
+			userID: 2,
+			mockBehavior: func(r *MockChatRepo) {
+				r.On("CheckIsMemberOfChat", mock.Anything, int64(1), int64(2)).
+					Return(false, nil)
+			},
+			expectedChat: domChat.Chat{},
+			expectError:  true,
+		},
+		{
+			name:   "Error checking membership",
+			chatID: 1,
+			userID: 2,
+			mockBehavior: func(r *MockChatRepo) {
+				r.On("CheckIsMemberOfChat", mock.Anything, int64(1), int64(2)).
+					Return(false, errors.New("db error"))
+			},
+			expectedChat: domChat.Chat{},
+			expectError:  true,
+		},
+		{
+			name:   "Error getting chat details",
+			chatID: 1,
+			userID: 2,
+			mockBehavior: func(r *MockChatRepo) {
+				r.On("CheckIsMemberOfChat", mock.Anything, int64(1), int64(2)).
+					Return(true, nil)
+				r.On("GetChatDetails", mock.Anything, int64(1)).
+					Return(domChat.Chat{}, errors.New("db error"))
+			},
+			expectedChat: domChat.Chat{},
+			expectError:  true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockRepo := new(MockChatRepo)
+			tt.mockBehavior(mockRepo)
+			chatService := NewChatService(nil, mockRepo, logger)
+			chat, err := chatService.GetChatDetails(context.Background(), tt.chatID, tt.userID)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Empty(t, chat)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedChat, chat)
+			}
+			mockRepo.AssertExpectations(t)
+		})
+	}
+}
+
+
