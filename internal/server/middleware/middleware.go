@@ -1,4 +1,4 @@
-package logger
+package middleware
 
 import (
 	"context"
@@ -10,13 +10,10 @@ import (
 	"github.com/go-chi/chi/middleware"
 )
 
-
-
 type JWTManager interface {
 	Parse(accessToken string) (int64, error)
 	Exists(ctx context.Context, token string) (bool, error)
 }
-
 
 func New(log *slog.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {

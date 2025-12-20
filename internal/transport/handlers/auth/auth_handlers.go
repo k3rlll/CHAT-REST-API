@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -15,19 +16,26 @@ import (
 )
 
 type AuthHandler struct {
-	UserSrv UserService
 	AuthSrv AuthService
 	logger  *slog.Logger
 	Manager JWTManager
 }
 
+type AuthService interface {
+	LoginUser(ctx context.Context, userID int64, password string) (accessToken string, refreshToken string, err error)
+	LogoutUser(ctx context.Context, userID int64, refreshToken string) error
+}
+
+type JWTManager interface {
+	Exists(context.Context, string) (bool, error)
+	Parse(string) (int64, error)
+}
+
 func NewAuthHandler(
-	userSrv UserService,
 	authSrv AuthService,
 	tokenManager JWTManager,
 	logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{
-		UserSrv: userSrv,
 		AuthSrv: authSrv,
 		Manager: tokenManager,
 		logger:  logger,

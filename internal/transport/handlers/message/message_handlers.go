@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
+	domChat "main/internal/domain/chat"
 	domMess "main/internal/domain/message"
 	mwMiddleware "main/internal/server/middleware"
 	"net/http"
@@ -12,8 +14,6 @@ import (
 )
 
 type MessageHandler struct {
-	UserSrv  UserService
-	AuthSrv  AuthService
 	MessSrv  MessageService
 	ChatSrv  ChatService
 	upgrader websocket.Upgrader
@@ -21,22 +21,36 @@ type MessageHandler struct {
 	Manager  JWTManager
 }
 
-func NewMessageHandler(userSrv UserService,
-	authSrv AuthService,
+func NewMessageHandler(
 	messSrv MessageService,
 	chatSrv ChatService,
 	logger *slog.Logger,
 	tokenManager JWTManager,
 ) *MessageHandler {
 	return &MessageHandler{
-		UserSrv:  userSrv,
-		AuthSrv:  authSrv,
 		MessSrv:  messSrv,
 		ChatSrv:  chatSrv,
 		upgrader: websocket.Upgrader{},
 		logger:   logger,
 		Manager:  tokenManager,
 	}
+}
+
+type MessageService interface {
+	Send(ctx context.Context, chatID, senderID int64, senderUsername, text string) (domMess.Message, error)
+	DeleteMessage(ctx context.Context, messageID int64) error
+	Edit(ctx context.Context, messageID int64, newText string) error
+	List(ctx context.Context, chatID int64) ([]domMess.Message, error)
+}
+type ChatService interface {
+	CreateChat(ctx context.Context, name string, memberIDs []int64) (domChat.Chat, error)
+	AddMember(ctx context.Context, chatID, userID int64) error
+	RemoveMember(ctx context.Context, chatID, userID int64) error
+}
+
+type JWTManager interface {
+	Exists(context.Context, string) (bool, error)
+	Parse(string) (int64, error)
 }
 
 // /chats/{id}/messages

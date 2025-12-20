@@ -3,19 +3,24 @@ package handlers
 import (
 	"log/slog"
 
+	auth "main/internal/transport/handlers/auth"
+	chat "main/internal/transport/handlers/chat"
+	message "main/internal/transport/handlers/message"
+	user "main/internal/transport/handlers/user"
+
 	"github.com/go-chi/chi"
 )
 
 type HTTPHandler struct {
-	UserHandler    *UserHandler
-	AuthHandler    *AuthHandler
-	ChatHandler    *ChatHandler
-	MessageHandler *MessageHandler
+	UserHandler    *user.UserHandler
+	AuthHandler    *auth.AuthHandler
+	ChatHandler    *chat.ChatHandler
+	MessageHandler *message.MessageHandler
 	Logger         *slog.Logger
 }
 
-func NewHTTPHandler(userHandler *UserHandler, authHandler *AuthHandler, chatHandler *ChatHandler,
-	messageHandler *MessageHandler, logger *slog.Logger) *HTTPHandler {
+func NewHTTPHandler(userHandler *user.UserHandler, authHandler *auth.AuthHandler, chatHandler *chat.ChatHandler,
+	messageHandler *message.MessageHandler, logger *slog.Logger) *HTTPHandler {
 	return &HTTPHandler{
 		UserHandler:    userHandler,
 		AuthHandler:    authHandler,

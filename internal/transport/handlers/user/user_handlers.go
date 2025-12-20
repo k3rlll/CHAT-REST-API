@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -13,10 +14,23 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type UserService interface {
+	RegisterUser(ctx context.Context, username, email, password string) (domUser.User, error)
+	SearchUser(ctx context.Context, query string) ([]domUser.User, error)
+}
+type AuthService interface {
+	LoginUser(ctx context.Context, userID int64, password string) (accessToken string, refreshToken string, err error)
+}
+
+type JWTManager interface {
+	Exists(context.Context, string) (bool, error)
+	Parse(string) (int64, error)
+}
+
 type UserHandler struct {
-	UserSrv      UserService
-	AuthSrv      AuthService
-	ChatSrv      ChatService
+	UserSrv UserService
+	AuthSrv AuthService
+
 	upgrader     websocket.Upgrader
 	tokenManager JWTManager
 	logger       *slog.Logger
@@ -24,14 +38,12 @@ type UserHandler struct {
 
 func NewUserHandler(userSrv UserService,
 	authSrv AuthService,
-	chatSrv ChatService,
 	upgrader websocket.Upgrader,
 	tokenManager JWTManager,
 	logger *slog.Logger) *UserHandler {
 	return &UserHandler{
 		UserSrv:      userSrv,
 		AuthSrv:      authSrv,
-		ChatSrv:      chatSrv,
 		upgrader:     websocket.Upgrader{},
 		tokenManager: tokenManager,
 		logger:       logger,

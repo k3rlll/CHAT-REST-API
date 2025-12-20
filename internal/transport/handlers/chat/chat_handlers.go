@@ -1,36 +1,59 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	dom "main/internal/domain/chat"
+	domMess "main/internal/domain/message"
+	domUser "main/internal/domain/user"
 	"main/internal/pkg/customerrors"
 	mwMiddleware "main/internal/server/middleware"
-	srvUser "main/internal/service/user"
 	"net/http"
 
 	"github.com/go-chi/chi"
 )
 
 type ChatHandler struct {
-	UserSrv UserService
-	AuthSrv AuthService
 	MessSrv MessageService
 	ChatSrv ChatService
 	logger  *slog.Logger
 	Manager JWTManager
 }
 
-func NewChatHandler(userSrv *srvUser.UserService,
-	authSrv AuthService,
+type UserService interface {
+	RegisterUser(ctx context.Context, username, email, password string) (domUser.User, error)
+	SearchUser(ctx context.Context, query string) ([]domUser.User, error)
+}
+
+type MessageService interface {
+	SendMessage(ctx context.Context, chatID, senderID int64, content string) (domMess.Message, error)
+	EditMessage(ctx context.Context, msgID, editorID int64, newContent string) (domMess.Message, error)
+	DeleteMessage(ctx context.Context, msgID, deleterID int64) error
+	ListMessages(ctx context.Context, chatID int64, cursor string, limit int) ([]domMess.Message, error)
+}
+
+type ChatService interface {
+	CreateChat(ctx context.Context, isGroup bool, title string, members []int64) (dom.Chat, error)
+	ListOfChats(ctx context.Context, userID int64) ([]dom.Chat, error)
+	OpenChat(ctx context.Context, chatID, userID int64) ([]domMess.Message, error)
+	GetChatDetails(ctx context.Context, chatID int64) (dom.Chat, error)
+	DeleteChat(ctx context.Context, chatID int64) error
+	AddMembers(ctx context.Context, chatID, userID int64, members []int64) error
+}
+
+type JWTManager interface {
+	Exists(context.Context, string) (bool, error)
+	Parse(string) (int64, error)
+}
+
+func NewChatHandler(
 	messSrv MessageService,
 	chatSrv ChatService,
 	logger *slog.Logger,
 	tokenManager JWTManager,
 ) *ChatHandler {
 	return &ChatHandler{
-		UserSrv: userSrv,
-		AuthSrv: authSrv,
 		MessSrv: messSrv,
 		ChatSrv: chatSrv,
 		logger:  logger,
