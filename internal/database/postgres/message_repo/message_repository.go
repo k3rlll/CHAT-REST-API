@@ -3,7 +3,7 @@ package message_repo
 import (
 	"context"
 	"log/slog"
-	dom "main/internal/domain/message"
+	dom "main/internal/domain/entity"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -44,11 +44,11 @@ func (m *MessageRepository) DeleteMessage(ctx context.Context, id int64) error {
 }
 
 func (m *MessageRepository) Create(
-	ctx context.Context, 
-	chatID int64, userID int64, 
+	ctx context.Context,
+	chatID int64, userID int64,
 	senderUsername string, text string) (dom.Message, error) {
 	var messageID int64
-	query:="INSERT INTO messages (chat_id, sender_id, sender_username, text) VALUES ($1,$2,$3,$4) RETURNING id"
+	query := "INSERT INTO messages (chat_id, sender_id, sender_username, text) VALUES ($1,$2,$3,$4) RETURNING id"
 
 	err := m.pool.QueryRow(ctx,
 		query, chatID, userID, senderUsername, text).Scan(&messageID)
@@ -100,5 +100,3 @@ func (m *MessageRepository) ListByChat(ctx context.Context, chatID int64) ([]dom
 	}
 	return out, rows.Err()
 }
-
-var _ dom.MessageInterface = (*MessageRepository)(nil)

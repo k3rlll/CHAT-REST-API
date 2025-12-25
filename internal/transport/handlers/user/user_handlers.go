@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	domUser "main/internal/domain/user"
+	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
 	mwMiddleware "main/internal/server/middleware"
 	"net/http"
@@ -15,8 +15,8 @@ import (
 )
 
 type UserService interface {
-	RegisterUser(ctx context.Context, username, email, password string) (domUser.User, error)
-	SearchUser(ctx context.Context, query string) ([]domUser.User, error)
+	RegisterUser(ctx context.Context, username, email, password string) (dom.User, error)
+	SearchUser(ctx context.Context, query string) ([]dom.User, error)
 }
 type AuthService interface {
 	LoginUser(ctx context.Context, userID int64, password string) (accessToken string, refreshToken string, err error)
@@ -107,7 +107,7 @@ func (h *UserHandler) usersSearchWS(w http.ResponseWriter, r *http.Request) {
 
 func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
-	var u domUser.User
+	var u dom.User
 
 	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
 		h.logger.Error("failed to decode request", slog.String("error", err.Error()))

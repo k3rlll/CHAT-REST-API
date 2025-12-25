@@ -3,7 +3,7 @@ package user_repository
 import (
 	"context"
 	"log/slog"
-	dom "main/internal/domain/user"
+	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -124,5 +124,3 @@ func (r *UserRepository) ChangeUsername(ctx context.Context, username string) (d
 	return user, nil
 }
 
-
-var _ dom.UserInterface = (*UserRepository)(nil)

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	domUser "main/internal/domain/user"
+	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
 	mwMiddleware "main/internal/server/middleware"
 	"net/http"
@@ -20,7 +20,7 @@ type AuthHandler struct {
 	logger  *slog.Logger
 	Manager JWTManager
 }
-
+//go:generate go run github.com/vektra/mockery/v2@v2.32.4 --name=AuthService
 type AuthService interface {
 	LoginUser(ctx context.Context, userID int64, password string) (accessToken string, refreshToken string, err error)
 	LogoutUser(ctx context.Context, userID int64, refreshToken string) error
@@ -52,7 +52,7 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 }
 
 func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
-	var u domUser.User
+	var u dom.User
 
 	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
 		h.logger.Error("failed to decode request", slog.String("error", err.Error()))

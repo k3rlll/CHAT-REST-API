@@ -3,26 +3,26 @@ package user
 import (
 	"context"
 	"log/slog"
-	dom "main/internal/domain/user"
+	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
 	"main/internal/pkg/utils"
 	"strings"
 	"time"
 )
 
-var (
-	SearchLimit  int64 = 10
-	SearchOffset int64 = 0
-)
+type UserInterface interface {
+	RegisterUser(ctx context.Context, username, email, passwordHash string) (dom.User, error)
+	SearchUser(ctx context.Context, query string) ([]dom.User, error)
+}
 
 type UserService struct {
-	Repo     dom.UserInterface
+	Repo     UserInterface
 	Logger   *slog.Logger
 	Timeout  time.Duration
 	MaxLimit int64
 }
 
-func NewUserService(repo dom.UserInterface, logger *slog.Logger) *UserService {
+func NewUserService(repo UserInterface, logger *slog.Logger) *UserService {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -71,7 +71,6 @@ func (s *UserService) SearchUser(ctx context.Context, message string) ([]dom.Use
 
 	users, err := s.Repo.SearchUser(ctx, q)
 	if err != nil {
-		s.Logger.Error("failed to search users", err.Error())
 		s.Logger.Info("service", "UserService.SearchUser")
 		return []dom.User{}, err
 	}

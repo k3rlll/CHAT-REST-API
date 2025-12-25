@@ -5,8 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	dom "main/internal/domain/chat"
-	domMessage "main/internal/domain/message"
+	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
 )
 
@@ -23,9 +22,10 @@ type ChatInterface interface {
 	DeleteChat(ctx context.Context, chatID int64) error
 	CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (int64, error)
 	CheckIsMemberOfChat(ctx context.Context, chatID int64, userID int64) (bool, error)
-	OpenChat(ctx context.Context, chatID int64, userID int64) ([]domMessage.Message, error)
+	OpenChat(ctx context.Context, chatID int64, userID int64) ([]dom.Message, error)
 	UserInChat(ctx context.Context, chatID int64, userID int64) (bool, error)
 	AddMembers(ctx context.Context, chatID int64, members []int64) error
+	RemoveMember(ctx context.Context, chatID int64, userID int64) error
 }
 
 type UserInterface interface {
@@ -109,7 +109,7 @@ func (c *ChatService) GetChatDetails(ctx context.Context, chatID int64, userID i
 func (c *ChatService) OpenChat(ctx context.Context,
 	chatID int64,
 	userID int64) (dom.Chat,
-	[]domMessage.Message,
+	[]dom.Message,
 	error) {
 
 	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
@@ -164,5 +164,20 @@ func (c *ChatService) AddMembers(ctx context.Context, chatID int64, userID int64
 		return err
 	}
 
+	return nil
+}
+
+func (c *ChatService) RemoveMember(ctx context.Context, chatID int64, userID int64) error {
+	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
+	if err != nil {
+		return customerrors.ErrFailedToCheck
+	}
+	if !isMember {
+		return customerrors.ErrUserNotMemberOfChat
+	}
+	err = c.Chat.RemoveMember(ctx, chatID, userID)
+	if err != nil {
+		return err
+	}
 	return nil
 }

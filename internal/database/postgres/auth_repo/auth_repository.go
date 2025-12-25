@@ -3,8 +3,7 @@ package auth_repo
 import (
 	"context"
 	"log/slog"
-	dom "main/internal/domain/auth"
-	domUser "main/internal/domain/user"
+	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -34,14 +33,14 @@ func (t *AuthRepository) SaveRefreshToken(ctx context.Context,
 	return err
 }
 
-func (t *AuthRepository) GetByEmail(ctx context.Context, email string) (domUser.User, error) {
-	var user domUser.User
+func (t *AuthRepository) GetByEmail(ctx context.Context, email string) (dom.User, error) {
+	var user dom.User
 
 	err := t.pool.QueryRow(ctx,
 		"SELECT id, username, password_hash FROM users WHERE email=$1", email).
 		Scan(&user.ID, &user.Username, &user.Password)
 	if err != nil {
-		return domUser.User{}, err
+		return dom.User{}, err
 	}
 	return user, nil
 }
@@ -49,15 +48,15 @@ func (t *AuthRepository) GetByEmail(ctx context.Context, email string) (domUser.
 func (t *AuthRepository) GetPasswordHash(ctx context.Context,
 	RefreshToken string,
 	userID int64,
-	password string) (domUser.User, error) {
+	password string) (dom.User, error) {
 	var passwordHash string
 
 	err := t.pool.QueryRow(ctx,
 		"SELECT password_hash FROM users WHERE id=$1", userID).Scan(&passwordHash)
 	if err != nil {
-		return domUser.User{}, customerrors.ErrInvalidInput
+		return dom.User{}, customerrors.ErrInvalidInput
 	}
-	var user domUser.User
+	var user dom.User
 	user.ID = userID
 	user.Password = passwordHash
 
@@ -70,4 +69,3 @@ func (t *AuthRepository) DeleteRefreshToken(ctx context.Context, userID int64) e
 	return err
 }
 
-var _ dom.AuthInterface = (*AuthRepository)(nil)

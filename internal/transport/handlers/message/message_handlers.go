@@ -4,21 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	domChat "main/internal/domain/chat"
-	domMess "main/internal/domain/message"
+	dom "main/internal/domain/entity"
 	mwMiddleware "main/internal/server/middleware"
 	"net/http"
 
 	"github.com/go-chi/chi"
-	"github.com/gorilla/websocket"
 )
 
 type MessageHandler struct {
-	MessSrv  MessageService
-	ChatSrv  ChatService
-	upgrader websocket.Upgrader
-	logger   *slog.Logger
-	Manager  JWTManager
+	MessSrv MessageService
+	ChatSrv ChatService
+	logger  *slog.Logger
+	Manager JWTManager
 }
 
 func NewMessageHandler(
@@ -28,22 +25,21 @@ func NewMessageHandler(
 	tokenManager JWTManager,
 ) *MessageHandler {
 	return &MessageHandler{
-		MessSrv:  messSrv,
-		ChatSrv:  chatSrv,
-		upgrader: websocket.Upgrader{},
-		logger:   logger,
-		Manager:  tokenManager,
+		MessSrv: messSrv,
+		ChatSrv: chatSrv,
+		logger:  logger,
+		Manager: tokenManager,
 	}
 }
 
 type MessageService interface {
-	Send(ctx context.Context, chatID, senderID int64, senderUsername, text string) (domMess.Message, error)
+	Send(ctx context.Context, chatID, senderID int64, senderUsername, text string) (dom.Message, error)
 	DeleteMessage(ctx context.Context, messageID int64) error
 	Edit(ctx context.Context, messageID int64, newText string) error
-	List(ctx context.Context, chatID int64) ([]domMess.Message, error)
+	List(ctx context.Context, chatID int64) ([]dom.Message, error)
 }
 type ChatService interface {
-	CreateChat(ctx context.Context, name string, memberIDs []int64) (domChat.Chat, error)
+	CreateChat(ctx context.Context, name string, memberIDs []int64) (dom.Chat, error)
 	AddMember(ctx context.Context, chatID, userID int64) error
 	RemoveMember(ctx context.Context, chatID, userID int64) error
 }
@@ -69,7 +65,7 @@ func (h *MessageHandler) RegisterRoutes(r chi.Router) {
 // method:  POST
 // info:    Отправить сообщение в чат
 func (h *MessageHandler) Send(w http.ResponseWriter, r *http.Request) {
-	var request domMess.Message
+	var request dom.Message
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		h.logger.Error("failed to decode request", err.Error())
@@ -107,7 +103,7 @@ func (h *MessageHandler) Send(w http.ResponseWriter, r *http.Request) {
 // info:    Удалить сообщение в чате
 func (h *MessageHandler) DeleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 
-	var MessageID domMess.Message
+	var MessageID dom.Message
 
 	if err := json.NewDecoder(r.Body).Decode(&MessageID); err != nil {
 		h.logger.Error("failed to decode request", err.Error())
@@ -127,7 +123,7 @@ func (h *MessageHandler) DeleteMessageHandler(w http.ResponseWriter, r *http.Req
 // method:  PUT
 // info:    Отредактировать сообщение в чате
 func (h *MessageHandler) EditMessage(w http.ResponseWriter, r *http.Request) {
-	var request domMess.Message
+	var request dom.Message
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		h.logger.Error("failed to decode request", err.Error())
@@ -146,7 +142,7 @@ func (h *MessageHandler) EditMessage(w http.ResponseWriter, r *http.Request) {
 // method:  GET
 // info:    Лист сообщений в чате
 func (h *MessageHandler) ListMessageHandlers(w http.ResponseWriter, r *http.Request) {
-	var chatID domMess.Message
+	var chatID dom.Message
 
 	if err := json.NewDecoder(r.Body).Decode(&chatID); err != nil {
 		h.logger.Error("failed to decode request", err.Error())

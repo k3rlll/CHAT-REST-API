@@ -3,8 +3,7 @@ package service
 import (
 	"context"
 	"log/slog"
-	dom "main/internal/domain/chat"
-	msg "main/internal/domain/message"
+	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
 )
 
@@ -15,18 +14,25 @@ type ChatInterface interface {
 	DeleteChat(ctx context.Context, chatID int64) error
 	CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (int64, error)
 	CheckIsMemberOfChat(ctx context.Context, chatID int64, userID int64) (bool, error)
-	OpenChat(ctx context.Context, chatID int64, userID int64) ([]msg.Message, error)
+	OpenChat(ctx context.Context, chatID int64, userID int64) ([]dom.Message, error)
 	UserInChat(ctx context.Context, chatID int64, userID int64) (bool, error)
-	AddMembers(ctx context.Context, chatID int64, members []int64) error
+}
+
+type MessageInterface interface {
+	Create(ctx context.Context, chatID int64, userID int64, senderUsername string, text string) (dom.Message, error)
+	EditMessage(ctx context.Context, messageID int64, newText string) error
+	DeleteMessage(ctx context.Context, messageID int64) error
+	CheckMessageExists(ctx context.Context, messageID int64) (bool, error)
+	ListByChat(ctx context.Context, chatID int64) ([]dom.Message, error)
 }
 
 type MessageService struct {
 	Chat    ChatInterface
-	Message msg.MessageInterface
+	Message MessageInterface
 	Logger  *slog.Logger
 }
 
-func NewMessageService(chat ChatInterface, message msg.MessageInterface, logger *slog.Logger) *MessageService {
+func NewMessageService(chat ChatInterface, message MessageInterface, logger *slog.Logger) *MessageService {
 	return &MessageService{
 		Chat:    chat,
 		Message: message,
@@ -34,21 +40,21 @@ func NewMessageService(chat ChatInterface, message msg.MessageInterface, logger 
 	}
 }
 
-func (m *MessageService) Send(ctx context.Context, chatID int64, userID int64, senderUsername string, text string) (msg.Message, error) {
+func (m *MessageService) SendMessage(ctx context.Context, chatID int64, userID int64, senderUsername string, text string) (dom.Message, error) {
 	isMember, err := m.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
 	if err != nil {
 		m.Logger.Error("failed to check if user is member of chat", err.Error())
-		return msg.Message{}, err
+		return dom.Message{}, err
 	}
 	if !isMember {
 		m.Logger.Error("user is not a member of the chat")
-		return msg.Message{}, customerrors.ErrUserNotMemberOfChat
+		return dom.Message{}, customerrors.ErrUserNotMemberOfChat
 	}
 
 	message, err := m.Message.Create(ctx, chatID, userID, senderUsername, text)
 	if err != nil {
 		m.Logger.Error("failed to create message", err.Error())
-		return msg.Message{}, err
+		return dom.Message{}, err
 	}
 
 	return message, nil
@@ -74,7 +80,7 @@ func (m *MessageService) DeleteMessage(ctx context.Context, messageID int64) err
 
 }
 
-func (m *MessageService) Edit(ctx context.Context, messageID int64, newText string) error {
+func (m *MessageService) EditMessage(ctx context.Context, messageID int64, newText string) error {
 	if newText == "" {
 		m.Logger.Error("new message text is empty")
 		return customerrors.ErrInvalidInput
@@ -96,6 +102,6 @@ func (m *MessageService) Edit(ctx context.Context, messageID int64, newText stri
 
 }
 
-func (m *MessageService) List(ctx context.Context, chatID int64) ([]msg.Message, error) {
+func (m *MessageService) ListMessages(ctx context.Context, chatID int64) ([]dom.Message, error) {
 	return m.Message.ListByChat(ctx, chatID)
 }

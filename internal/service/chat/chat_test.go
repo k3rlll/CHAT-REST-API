@@ -5,8 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	domChat "main/internal/domain/chat"
-	domMessage "main/internal/domain/message"
+	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
 	"testing"
 
@@ -18,19 +17,19 @@ type MockChatRepo struct {
 	mock.Mock
 }
 
-func (m *MockChatRepo) GetChatDetails(ctx context.Context, chatID int64) (domChat.Chat, error) {
+func (m *MockChatRepo) GetChatDetails(ctx context.Context, chatID int64) (dom.Chat, error) {
 	args := m.Called(ctx, chatID)
 	if args.Get(0) == nil {
-		return domChat.Chat{}, args.Error(1)
+		return dom.Chat{}, args.Error(1)
 	}
-	return args.Get(0).(domChat.Chat), args.Error(1)
+	return args.Get(0).(dom.Chat), args.Error(1)
 }
-func (m *MockChatRepo) ListOfChats(ctx context.Context, userID int64) ([]domChat.Chat, error) {
+func (m *MockChatRepo) ListOfChats(ctx context.Context, userID int64) ([]dom.Chat, error) {
 	args := m.Called(ctx, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]domChat.Chat), args.Error(1)
+	return args.Get(0).([]dom.Chat), args.Error(1)
 }
 
 func (m *MockChatRepo) CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (int64, error) {
@@ -57,12 +56,12 @@ func (m *MockChatRepo) CheckIsMemberOfChat(ctx context.Context, chatID int64, us
 	return args.Get(0).(bool), args.Error(1)
 }
 
-func (m *MockChatRepo) OpenChat(ctx context.Context, chatID int64, userID int64) ([]domMessage.Message, error) {
+func (m *MockChatRepo) OpenChat(ctx context.Context, chatID int64, userID int64) ([]dom.Message, error) {
 	args := m.Called(ctx, chatID, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]domMessage.Message), args.Error(1)
+	return args.Get(0).([]dom.Message), args.Error(1)
 }
 
 func (m *MockChatRepo) UserInChat(ctx context.Context, chatID int64, userID int64) (bool, error) {
@@ -71,6 +70,14 @@ func (m *MockChatRepo) UserInChat(ctx context.Context, chatID int64, userID int6
 }
 func (m *MockChatRepo) AddMembers(ctx context.Context, chatID int64, members []int64) error {
 	args := m.Called(ctx, chatID, members)
+	if args.Get(0) == nil {
+		return nil
+	}
+	return args.Error(0)
+}
+
+func (m *MockChatRepo) RemoveMember(ctx context.Context, chatID int64, userID int64) error {
+	args := m.Called(ctx, chatID, userID)
 	if args.Get(0) == nil {
 		return nil
 	}
@@ -97,7 +104,7 @@ func TestChatService_CreateChat(t *testing.T) {
 		inputPrivate bool
 		inputMembers []int64
 		mockBehavior func(r *MockChatRepo)
-		expectedChat domChat.Chat
+		expectedChat dom.Chat
 		expectError  bool
 	}{
 		{
@@ -109,7 +116,7 @@ func TestChatService_CreateChat(t *testing.T) {
 				r.On("CreateChat", mock.Anything, "test", true, members).
 					Return(int64(777), nil)
 			},
-			expectedChat: domChat.Chat{
+			expectedChat: dom.Chat{
 				Id:        777,
 				Title:     "test",
 				IsPrivate: true,
@@ -123,7 +130,7 @@ func TestChatService_CreateChat(t *testing.T) {
 			inputMembers: members,
 			mockBehavior: func(r *MockChatRepo) {
 			},
-			expectedChat: domChat.Chat{},
+			expectedChat: dom.Chat{},
 			expectError:  true,
 		},
 		{
@@ -132,7 +139,7 @@ func TestChatService_CreateChat(t *testing.T) {
 			inputPrivate: true,
 			inputMembers: []int64{},
 			mockBehavior: func(r *MockChatRepo) {},
-			expectedChat: domChat.Chat{},
+			expectedChat: dom.Chat{},
 			expectError:  true,
 		},
 	}
@@ -249,7 +256,7 @@ func TestChatService_GetChatDetails(t *testing.T) {
 		chatID       int64
 		userID       int64
 		mockBehavior func(r *MockChatRepo)
-		expectedChat domChat.Chat
+		expectedChat dom.Chat
 		expectError  bool
 	}{
 		{
@@ -260,14 +267,14 @@ func TestChatService_GetChatDetails(t *testing.T) {
 				r.On("CheckIsMemberOfChat", mock.Anything, int64(1), int64(2)).
 					Return(true, nil)
 				r.On("GetChatDetails", mock.Anything, int64(1)).
-					Return(domChat.Chat{
+					Return(dom.Chat{
 						Id:        1,
 						Title:     "Test Chat",
 						IsPrivate: false,
 						MembersID: []int64{2, 3, 4},
 					}, nil)
 			},
-			expectedChat: domChat.Chat{
+			expectedChat: dom.Chat{
 				Id:        1,
 				Title:     "Test Chat",
 				IsPrivate: false,
@@ -282,7 +289,7 @@ func TestChatService_GetChatDetails(t *testing.T) {
 				r.On("CheckIsMemberOfChat", mock.Anything, int64(1), int64(2)).
 					Return(false, nil)
 			},
-			expectedChat: domChat.Chat{},
+			expectedChat: dom.Chat{},
 			expectError:  true,
 		},
 		{
@@ -293,7 +300,7 @@ func TestChatService_GetChatDetails(t *testing.T) {
 				r.On("CheckIsMemberOfChat", mock.Anything, int64(1), int64(2)).
 					Return(false, errors.New("db error"))
 			},
-			expectedChat: domChat.Chat{},
+			expectedChat: dom.Chat{},
 			expectError:  true,
 		},
 		{
@@ -304,9 +311,9 @@ func TestChatService_GetChatDetails(t *testing.T) {
 				r.On("CheckIsMemberOfChat", mock.Anything, int64(1), int64(2)).
 					Return(true, nil)
 				r.On("GetChatDetails", mock.Anything, int64(1)).
-					Return(domChat.Chat{}, errors.New("db error"))
+					Return(dom.Chat{}, errors.New("db error"))
 			},
-			expectedChat: domChat.Chat{},
+			expectedChat: dom.Chat{},
 			expectError:  true,
 		},
 	}
@@ -328,5 +335,3 @@ func TestChatService_GetChatDetails(t *testing.T) {
 		})
 	}
 }
-
-

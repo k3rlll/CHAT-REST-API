@@ -4,9 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	dom "main/internal/domain/chat"
-	domMess "main/internal/domain/message"
-	domUser "main/internal/domain/user"
+	dom "main/internal/domain/entity"
+
 	"main/internal/pkg/customerrors"
 	mwMiddleware "main/internal/server/middleware"
 	"net/http"
@@ -22,22 +21,21 @@ type ChatHandler struct {
 }
 
 type UserService interface {
-	RegisterUser(ctx context.Context, username, email, password string) (domUser.User, error)
-	SearchUser(ctx context.Context, query string) ([]domUser.User, error)
+	RegisterUser(ctx context.Context, username, email, password string) (dom.User, error)
+	SearchUser(ctx context.Context, query string) ([]dom.User, error)
 }
 
 type MessageService interface {
-	SendMessage(ctx context.Context, chatID, senderID int64, content string) (domMess.Message, error)
-	EditMessage(ctx context.Context, msgID, editorID int64, newContent string) (domMess.Message, error)
-	DeleteMessage(ctx context.Context, msgID, deleterID int64) error
-	ListMessages(ctx context.Context, chatID int64, cursor string, limit int) ([]domMess.Message, error)
+	SendMessage(ctx context.Context, chatID int64, userID int64, senderUsername string, text string) (dom.Message, error)
+	DeleteMessage(ctx context.Context, msgID int64) error
+	ListMessages(ctx context.Context, chatID int64) ([]dom.Message, error)
 }
 
 type ChatService interface {
 	CreateChat(ctx context.Context, isGroup bool, title string, members []int64) (dom.Chat, error)
 	ListOfChats(ctx context.Context, userID int64) ([]dom.Chat, error)
-	OpenChat(ctx context.Context, chatID, userID int64) ([]domMess.Message, error)
-	GetChatDetails(ctx context.Context, chatID int64) (dom.Chat, error)
+	OpenChat(ctx context.Context, chatID int64, userID int64) (dom.Chat, []dom.Message, error)
+	GetChatDetails(ctx context.Context, chatID int64, userID int64) (dom.Chat, error)
 	DeleteChat(ctx context.Context, chatID int64) error
 	AddMembers(ctx context.Context, chatID, userID int64, members []int64) error
 }
@@ -148,20 +146,14 @@ func (h *ChatHandler) OpenChatHandler(w http.ResponseWriter, r *http.Request) {
 	chatID := requestData["chat_id"]
 	userID := requestData["user_id"]
 
-	messages, err := h.ChatSrv.OpenChat(r.Context(), chatID, userID)
+	chat, messages, err := h.ChatSrv.OpenChat(r.Context(), chatID, userID)
 	if err != nil {
 		h.logger.Error("failed to open chat", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	details, err := h.ChatSrv.GetChatDetails(r.Context(), chatID)
-	if err != nil {
-		h.logger.Error("failed to get chat details", slog.String("error", err.Error()))
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 
-	marshalDetails, err := json.MarshalIndent(details, "", "  ")
+	marshalDetails, err := json.MarshalIndent(chat, "", "  ")
 	if err != nil {
 		h.logger.Error("failed to marshal response", slog.String("error", err.Error()))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	rdb "main/internal/database/redis"
-	db "main/internal/domain/user"
+	dom "main/internal/domain/entity"
 	customerrors "main/internal/pkg/customerrors"
 	jwt "main/internal/pkg/jwt"
 	"time"
@@ -24,7 +24,7 @@ type AuthService struct {
 }
 
 type AuthRepository interface {
-	GetPasswordHash(ctx context.Context, refreshToken string, userID int64, password string) (db.User, error)
+	GetPasswordHash(ctx context.Context, refreshToken string, userID int64, password string) (dom.User, error)
 	SaveRefreshToken(ctx context.Context, userID int64, refreshToken string) error
 	DeleteRefreshToken(ctx context.Context, userID int64) error
 }

@@ -24,6 +24,10 @@ import (
 	srvChat "main/internal/service/chat"
 	srvMessage "main/internal/service/message"
 	srvUser "main/internal/service/user"
+	AuthHandler "main/internal/transport/handlers/auth"
+	ChatHandler "main/internal/transport/handlers/chat"
+	MessageHandler "main/internal/transport/handlers/message"
+	UserHandler "main/internal/transport/handlers/user"
 	httpHandler "main/internal/transport/handlers"
 
 	"github.com/go-chi/chi"
@@ -110,10 +114,10 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	userHandler := httpHandler.NewUserHandler(userService, authService, messageService, chatService, upgrader, NewJWTFacade, logger)
-	authHandler := httpHandler.NewAuthHandler(userService, authService, NewJWTFacade, logger)
-	chatHandler := httpHandler.NewChatHandler(userService, authService, messageService, chatService, logger, NewJWTFacade)
-	messageHandler := httpHandler.NewMessageHandler(userService, authService, messageService, chatService, logger, NewJWTFacade)
+	userHandler := UserHandler.NewUserHandler(userService, authService, upgrader, NewJWTFacade, logger)
+	authHandler := AuthHandler.NewAuthHandler(authService, NewJWTFacade, logger)
+	chatHandler := ChatHandler.NewChatHandler(messageService, chatService, logger, NewJWTFacade )
+	messageHandler := MessageHandler.NewMessageHandler(messageService, chatService, authService, logger, NewJWTFacade)
 
 	HTTP := httpHandler.NewHTTPHandler(userHandler, authHandler, chatHandler, messageHandler, logger)
 
