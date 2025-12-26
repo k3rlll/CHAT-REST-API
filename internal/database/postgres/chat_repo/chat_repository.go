@@ -1,4 +1,4 @@
-package database
+package chat_repo
 
 import (
 	"context"

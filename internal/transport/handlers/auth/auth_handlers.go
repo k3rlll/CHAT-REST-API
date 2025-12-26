@@ -1,4 +1,4 @@
-package handlers
+package auth
 
 import (
 	"context"
@@ -20,6 +20,7 @@ type AuthHandler struct {
 	logger  *slog.Logger
 	Manager JWTManager
 }
+
 //go:generate go run github.com/vektra/mockery/v2@v2.32.4 --name=AuthService
 type AuthService interface {
 	LoginUser(ctx context.Context, userID int64, password string) (accessToken string, refreshToken string, err error)

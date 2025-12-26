@@ -117,7 +117,7 @@ func main() {
 	userHandler := UserHandler.NewUserHandler(userService, authService, upgrader, NewJWTFacade, logger)
 	authHandler := AuthHandler.NewAuthHandler(authService, NewJWTFacade, logger)
 	chatHandler := ChatHandler.NewChatHandler(messageService, chatService, logger, NewJWTFacade )
-	messageHandler := MessageHandler.NewMessageHandler(messageService, chatService, authService, logger, NewJWTFacade)
+	messageHandler := MessageHandler.NewMessageHandler(messageService, chatService, logger, NewJWTFacade)
 
 	HTTP := httpHandler.NewHTTPHandler(userHandler, authHandler, chatHandler, messageHandler, logger)
 

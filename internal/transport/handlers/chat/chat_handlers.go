@@ -1,4 +1,4 @@
-package handlers
+package chat
 
 import (
 	"context"
@@ -191,21 +191,6 @@ func (h *ChatHandler) OpenChatHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// pattern: /v1/chats/{id}
-// method:  DELETE
-// info:    Удалить чат/Архивировать
-
-// succeed:
-//   - status code: 204 No Content
-//   - response body: пусто
-
-// failed:
-//   - status code: 401 Unauthorized
-//   - status code: 403 Forbidden (нельзя покинуть как единственный owner)
-//   - status code: 404 Not Found
-//   - status code: 409 Conflict (состояние не позволяет)
-//   - status code: 500 Internal Server Error
-//   - response body: JSON error + time
 func (h *ChatHandler) DeleteChatHandler(w http.ResponseWriter, r *http.Request) {
 
 	var chat_id int64

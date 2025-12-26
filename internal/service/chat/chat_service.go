@@ -11,11 +11,11 @@ import (
 
 type ChatService struct {
 	User   UserInterface
-	Chat   ChatInterface
+	Chat   ChatRepositoryInterface
 	Logger *slog.Logger
 }
 
-type ChatInterface interface {
+type ChatRepositoryInterface interface {
 	GetChatDetails(ctx context.Context, chatID int64) (dom.Chat, error)
 	ListOfChats(ctx context.Context, userID int64) ([]dom.Chat, error)
 	CheckIfChatExists(ctx context.Context, chatID int64) (bool, error)
@@ -32,16 +32,17 @@ type UserInterface interface {
 	CheckUserExists(ctx context.Context, userID int64) bool
 }
 
-func NewChatService(user UserInterface, chat ChatInterface, logger *slog.Logger) *ChatService {
+func NewChatService(user UserInterface, chat ChatRepositoryInterface, logger *slog.Logger) *ChatService {
 	return &ChatService{
 		User:   user,
 		Chat:   chat,
 		Logger: logger,
 	}
 }
-func (c *ChatService) CreateChat(ctx context.Context,
-	isPrivate bool,
+func (c *ChatService) CreateChat(
+	ctx context.Context,
 	title string,
+	isPrivate bool,
 	members []int64) (dom.Chat, error) {
 
 	if len(members) == 0 {
