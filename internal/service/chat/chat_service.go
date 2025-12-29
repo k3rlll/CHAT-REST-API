@@ -2,7 +2,6 @@ package chat
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	dom "main/internal/domain/entity"
@@ -15,6 +14,7 @@ type ChatService struct {
 	Logger *slog.Logger
 }
 
+//go:generate mockgen -source=chat_service.go -destination=mock/chat_mocks.go -package=mock
 type ChatRepositoryInterface interface {
 	GetChatDetails(ctx context.Context, chatID int64) (dom.Chat, error)
 	ListOfChats(ctx context.Context, userID int64) ([]dom.Chat, error)
@@ -53,9 +53,13 @@ func (c *ChatService) CreateChat(
 		return dom.Chat{}, fmt.Errorf("chat service:chat title cannot be empty: %w", customerrors.ErrInvalidInput)
 	}
 
+	if len(title) > 20 {
+		return dom.Chat{}, fmt.Errorf("chat service: chat title cannot be more than 20 characters: %w", customerrors.ErrInvalidInput)
+	}
+
 	chat_id, err := c.Chat.CreateChat(ctx, title, isPrivate, members)
 	if err != nil {
-		return dom.Chat{}, err
+		return dom.Chat{}, customerrors.ErrDatabase
 	}
 
 	chat := dom.Chat{
@@ -67,14 +71,16 @@ func (c *ChatService) CreateChat(
 }
 
 func (c *ChatService) DeleteChat(ctx context.Context, chatID int64) error {
-	c.Logger.Info("DeleteChat called", slog.Int64("chatID", chatID))
+	if chatID <= 0 {
+		return fmt.Errorf("chat service: invalid chatID: %w", customerrors.ErrInvalidInput)
+	}
 
 	exists, err := c.Chat.CheckIfChatExists(ctx, chatID)
 	if err != nil {
 		return err
 	}
 	if !exists {
-		return errors.New("chat does not exist")
+		return customerrors.ErrNotFound
 	}
 
 	err = c.Chat.DeleteChat(ctx, chatID)
@@ -112,6 +118,9 @@ func (c *ChatService) OpenChat(ctx context.Context,
 	userID int64) (dom.Chat,
 	[]dom.Message,
 	error) {
+	if chatID <= 0 {
+		return dom.Chat{}, nil, fmt.Errorf("chat service: invalid chatID: %w", customerrors.ErrInvalidInput)
+	}
 
 	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
 	if err != nil {
@@ -123,13 +132,12 @@ func (c *ChatService) OpenChat(ctx context.Context,
 
 	details, err := c.Chat.GetChatDetails(ctx, chatID)
 	if err != nil {
-		return dom.Chat{}, nil, err
+		return dom.Chat{}, nil, customerrors.ErrDatabase
 	}
 	for i, member := range details.MembersID {
 		details.MembersID[i] = member
 	}
 	details.MembersCount = len(details.MembersID)
-	details.MembersID = nil
 
 	messages, err := c.Chat.OpenChat(ctx, chatID, userID)
 	if err != nil {

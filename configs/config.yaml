@@ -19,3 +19,4 @@ logging:
   level: info
   format: json  # или "text"
   output: stdout
+

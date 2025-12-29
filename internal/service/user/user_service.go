@@ -10,6 +10,7 @@ import (
 	"time"
 )
 
+//go:generate mockery --name=UserInterface --output=./mocks --with-expecter --case=snake
 type UserInterface interface {
 	RegisterUser(ctx context.Context, username, email, passwordHash string) (dom.User, error)
 	SearchUser(ctx context.Context, query string) ([]dom.User, error)

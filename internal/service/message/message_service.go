@@ -8,14 +8,7 @@ import (
 )
 
 type ChatInterface interface {
-	GetChatDetails(ctx context.Context, chatID int64) (dom.Chat, error)
-	ListOfChats(ctx context.Context, userID int64) ([]dom.Chat, error)
-	CheckIfChatExists(ctx context.Context, chatID int64) (bool, error)
-	DeleteChat(ctx context.Context, chatID int64) error
-	CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (int64, error)
 	CheckIsMemberOfChat(ctx context.Context, chatID int64, userID int64) (bool, error)
-	OpenChat(ctx context.Context, chatID int64, userID int64) ([]dom.Message, error)
-	UserInChat(ctx context.Context, chatID int64, userID int64) (bool, error)
 }
 
 type MessageInterface interface {

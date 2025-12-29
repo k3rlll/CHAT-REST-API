@@ -17,4 +17,6 @@ var (
 	ErrTokenCreationFailed   = errors.New("token creation failed")
 	ErrRedisFailed           = errors.New("redis failed")
 	ErrInvalidInput          = errors.New("invalid input")
+	ErrDatabase              = errors.New("database error")
+	ErrNotFound              = errors.New("not found")
 )

@@ -160,26 +160,27 @@ func (c *ChatRepository) OpenChat(ctx context.Context, chatID int64, userID int6
 			"WHERE chat_members.user_id = $1 AND messages.chat_id = $2 "+
 			"ORDER BY messages.created_at DESC", userID, chatID)
 	if err != nil {
-		return  nil, fmt.Errorf("repository: failed to select messages: %w", err)
+		return nil, fmt.Errorf("repository: failed to select messages: %w", err)
 	}
 
 	messages := []dom.Message{}
 	for rows.Next() {
 		var message dom.Message
-		if err := rows.Scan(&message.Id,
+		if err := rows.Scan(
+			&message.Id,
 			&message.ChatID,
 			&message.SenderID,
 			&message.SenderUsername,
 			&message.Text,
 			&message.CreatedAt); err != nil {
-			return  nil, fmt.Errorf("repository: failed to scan message: %w", err)
+			return nil, fmt.Errorf("repository: failed to scan message: %w", err)
 		}
 		messages = append(messages, message)
 	}
 
 	defer rows.Close()
 
-	return  messages, nil
+	return messages, nil
 }
 
 func (c *ChatRepository) AddMembers(ctx context.Context, chatID int64, members []int64) error {

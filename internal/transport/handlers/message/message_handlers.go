@@ -58,41 +58,9 @@ func (h *MessageHandler) RegisterRoutes(r chi.Router) {
 		r.Delete("/{msg_id}", h.DeleteMessageHandler)
 		r.Get("/", h.ListMessageHandlers)
 		r.Put("/{msg_id}", h.EditMessage)
-		r.Post("/add_member", h.AddMembers)
-		r.Post("/create_chat", h.CreateChat)
 	})
 }
 
-func (h *MessageHandler) CreateChat(w http.ResponseWriter, r *http.Request) {
-	var request struct {
-		Title     string  `json:"title"`
-		IsPrivate bool    `json:"is_private"`
-		Members   []int64 `json:"members"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		h.logger.Error("failed to decode request", err.Error())
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-	chat, err := h.ChatSrv.CreateChat(r.Context(), request.Title, request.IsPrivate, request.Members)
-	if err != nil {
-		h.logger.Error("failed to create chat", err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	b, err := json.MarshalIndent(chat, "", "	")
-	if err != nil {
-		h.logger.Error("failed to marshal chat", err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	_, err = w.Write(b)
-	if err != nil {
-		h.logger.Error("failed to write response", err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-}
 
 // pattern: /v1/chats/id/messages
 // method:  POST
@@ -204,22 +172,3 @@ func (h *MessageHandler) ListMessageHandlers(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-func (h *MessageHandler) AddMembers(w http.ResponseWriter, r *http.Request) {
-	var request struct {
-		ChatID  int64   `json:"chat_id"`
-		UserID  int64   `json:"user_id"`
-		Members []int64 `json:"members"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		h.logger.Error("failed to decode request", err.Error())
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	if err := h.ChatSrv.AddMembers(r.Context(), request.ChatID, request.UserID, request.Members); err != nil {
-		h.logger.Error("failed to add members", err.Error())
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}

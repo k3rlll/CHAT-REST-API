@@ -1,8 +1,6 @@
 module main
 
-go 1.24.0
-
-toolchain go1.24.9
+go 1.24.9
 
 require (
 	github.com/go-chi/chi v1.5.5
@@ -13,6 +11,7 @@ require (
 	github.com/ilyakaznacheev/cleanenv v1.5.0
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/stretchr/testify v1.11.1
+	go.uber.org/mock v0.6.0
 	golang.org/x/crypto v0.43.0
 )
 

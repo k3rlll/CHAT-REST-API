@@ -37,12 +37,10 @@ func (r *UserRepository) RegisterUser(
 	var userRes dom.User
 
 	if r.CheckUsernameExists(ctx, username) {
-		r.logger.Error("username already exists", customerrors.ErrUsernameAlreadyExists)
 		return dom.User{}, customerrors.ErrUsernameAlreadyExists
 	}
 
 	if CheckEmailExists(ctx, r.pool, email) {
-		r.logger.Error("email already exists", customerrors.ErrEmailAlreadyExists)
 		return dom.User{}, customerrors.ErrEmailAlreadyExists
 	}
 
@@ -50,12 +48,10 @@ func (r *UserRepository) RegisterUser(
 		"INSERT INTO users (email, password_hash, username) VALUES ($1, $2, $3);",
 		email, passwordHash, username)
 	if err != nil {
-		r.logger.Error("failed to insert new user", err.Error())
 		return dom.User{}, err
 	}
 
 	if tag.RowsAffected() == 0 {
-		r.logger.Error("no rows affected when inserting new user")
 		return dom.User{}, err
 	}
 	userRes = dom.User{
@@ -71,7 +67,6 @@ func (r *UserRepository) SearchUser(ctx context.Context, q string) ([]dom.User, 
 	rows, err := r.pool.Query(ctx,
 		"SELECT username FROM users WHERE username ILIKE '%' || $1 || '%';", q)
 	if err != nil {
-		r.logger.Error("error occurred during user search", slog.String("error", err.Error()))
 		return nil, err
 	}
 	defer rows.Close()
@@ -80,7 +75,6 @@ func (r *UserRepository) SearchUser(ctx context.Context, q string) ([]dom.User, 
 		var user dom.User
 		err := rows.Scan(&user.Username)
 		if err != nil {
-			r.logger.Error("error occurred during scanning user search result", slog.String("error", err.Error()))
 			return nil, err
 		}
 		users = append(users, user)
@@ -94,18 +88,16 @@ func (r *UserRepository) CheckUsernameExists(ctx context.Context, username strin
 	err := r.pool.QueryRow(ctx,
 		"SELECT EXISTS (SELECT 1 FROM users WHERE username=$1)", username).Scan(&exists)
 	if err != nil {
-		r.logger.Error("error occurred during user existence check", slog.String("error", err.Error()))
 		return false
 	}
 	return exists
 }
 
-func(r *UserRepository) CheckUserExists(ctx context.Context, userID int64) bool {
+func (r *UserRepository) CheckUserExists(ctx context.Context, userID int64) bool {
 	var exists bool
 	err := r.pool.QueryRow(ctx,
 		"SELECT EXISTS (SELECT 1 FROM users WHERE id=$1)", userID).Scan(&exists)
 	if err != nil {
-		r.logger.Error("error occurred during user existence check", slog.String("error", err.Error()))
 		return false
 	}
 	return exists
@@ -117,10 +109,8 @@ func (r *UserRepository) ChangeUsername(ctx context.Context, username string) (d
 		_, err := r.pool.Exec(ctx,
 			"UPDATE users SET username=$1", username)
 		if err != nil {
-			r.logger.Error("failed to update username", err.Error())
 			return dom.User{}, err
 		}
 	}
 	return user, nil
 }
-

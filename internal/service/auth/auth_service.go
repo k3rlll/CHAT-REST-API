@@ -23,6 +23,7 @@ type AuthService struct {
 	Repo  AuthRepository
 }
 
+//go:generate mockgen -source=auth_service.go -destination=./mock/auth_mocks.go -package=mock
 type AuthRepository interface {
 	GetPasswordHash(ctx context.Context, refreshToken string, userID int64, password string) (dom.User, error)
 	SaveRefreshToken(ctx context.Context, userID int64, refreshToken string) error
@@ -66,7 +67,7 @@ func (s *AuthService) LoginUser(ctx context.Context,
 
 	user, err := s.Repo.GetPasswordHash(ctx, RefreshToken, userID, password)
 	if err != nil {
-		return "", "", err
+		return "", "", customerrors.ErrDatabase
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
@@ -92,6 +93,14 @@ func (s *AuthService) LoginUser(ctx context.Context,
 }
 
 func (s *AuthService) LogoutUser(ctx context.Context, userID int64, accessToken string) error {
+
+	if userID == 0 || userID < 0 {
+		return fmt.Errorf("invalid userID")
+	}
+
+	if accessToken == "" {
+		return fmt.Errorf("access token is empty")
+	}
 
 	err := s.redis.Set(ctx, accessToken, "blacklist", 60*15)
 	if err != nil {

@@ -32,7 +32,7 @@ type MessageService interface {
 }
 
 type ChatService interface {
-	CreateChat(ctx context.Context, isGroup bool, title string, members []int64) (dom.Chat, error)
+	CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (dom.Chat, error)
 	ListOfChats(ctx context.Context, userID int64) ([]dom.Chat, error)
 	OpenChat(ctx context.Context, chatID int64, userID int64) (dom.Chat, []dom.Message, error)
 	GetChatDetails(ctx context.Context, chatID int64, userID int64) (dom.Chat, error)
@@ -88,7 +88,7 @@ func (h *ChatHandler) CreateChatHandler(w http.ResponseWriter, r *http.Request) 
 
 	members := chat.MembersID
 	title := chat.Title
-	_, err := h.ChatSrv.CreateChat(r.Context(), false, title, members)
+	_, err := h.ChatSrv.CreateChat(r.Context(), title, chat.IsPrivate, members)
 	if err != nil {
 		h.logger.Error("failed to create chat", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
