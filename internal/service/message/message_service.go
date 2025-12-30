@@ -11,6 +11,7 @@ type ChatInterface interface {
 	CheckIsMemberOfChat(ctx context.Context, chatID int64, userID int64) (bool, error)
 }
 
+//go:generate mockgen -source=message_service.go -destination=mock/message_mocks.go -package=mock
 type MessageInterface interface {
 	Create(ctx context.Context, chatID int64, userID int64, senderUsername string, text string) (dom.Message, error)
 	EditMessage(ctx context.Context, messageID int64, newText string) error
@@ -36,18 +37,15 @@ func NewMessageService(chat ChatInterface, message MessageInterface, logger *slo
 func (m *MessageService) SendMessage(ctx context.Context, chatID int64, userID int64, senderUsername string, text string) (dom.Message, error) {
 	isMember, err := m.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
 	if err != nil {
-		m.Logger.Error("failed to check if user is member of chat", err.Error())
-		return dom.Message{}, err
+		return dom.Message{}, customerrors.ErrDatabase
 	}
 	if !isMember {
-		m.Logger.Error("user is not a member of the chat")
 		return dom.Message{}, customerrors.ErrUserNotMemberOfChat
 	}
 
 	message, err := m.Message.Create(ctx, chatID, userID, senderUsername, text)
 	if err != nil {
-		m.Logger.Error("failed to create message", err.Error())
-		return dom.Message{}, err
+		return dom.Message{}, customerrors.ErrDatabase
 	}
 
 	return message, nil
@@ -56,17 +54,14 @@ func (m *MessageService) SendMessage(ctx context.Context, chatID int64, userID i
 func (m *MessageService) DeleteMessage(ctx context.Context, messageID int64) error {
 	exists, err := m.Message.CheckMessageExists(ctx, messageID)
 	if err != nil {
-		m.Logger.Error(err.Error())
-		return err
+		return customerrors.ErrDatabase
 	}
 	if !exists {
-		m.Logger.Error("the message does not exists")
 		return customerrors.ErrMessageDoesNotExists
 	}
 	err = m.Message.DeleteMessage(ctx, messageID)
 	if err != nil {
-		m.Logger.Error("failed to delete message", err.Error())
-		return err
+		return customerrors.ErrDatabase
 	}
 
 	return nil
@@ -80,16 +75,13 @@ func (m *MessageService) EditMessage(ctx context.Context, messageID int64, newTe
 	}
 	exists, err := m.Message.CheckMessageExists(ctx, messageID)
 	if err != nil {
-		m.Logger.Error("failed to check if the message exists", err.Error())
-		return err
+		return customerrors.ErrDatabase
 	}
 	if !exists {
-		m.Logger.Error("the message does not exists")
 		return customerrors.ErrMessageDoesNotExists
 	}
 	if err := m.Message.EditMessage(ctx, messageID, newText); err != nil {
-		m.Logger.Error("failed to edit message", err.Error())
-		return err
+		return customerrors.ErrDatabase
 	}
 	return nil
 

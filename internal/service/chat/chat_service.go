@@ -21,9 +21,8 @@ type ChatRepositoryInterface interface {
 	CheckIfChatExists(ctx context.Context, chatID int64) (bool, error)
 	DeleteChat(ctx context.Context, chatID int64) error
 	CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (int64, error)
-	CheckIsMemberOfChat(ctx context.Context, chatID int64, userID int64) (bool, error)
-	OpenChat(ctx context.Context, chatID int64, userID int64) ([]dom.Message, error)
 	UserInChat(ctx context.Context, chatID int64, userID int64) (bool, error)
+	OpenChat(ctx context.Context, chatID int64, userID int64) ([]dom.Message, error)
 	AddMembers(ctx context.Context, chatID int64, members []int64) error
 	RemoveMember(ctx context.Context, chatID int64, userID int64) error
 }
@@ -99,7 +98,7 @@ func (c *ChatService) ListOfChats(ctx context.Context, userID int64) ([]dom.Chat
 func (c *ChatService) GetChatDetails(ctx context.Context, chatID int64, userID int64) (dom.Chat, error) {
 	c.Logger.Info("GetChatDetails called", slog.Int64("chatID", chatID), slog.Int64("userID", userID))
 
-	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
+	isMember, err := c.Chat.UserInChat(ctx, chatID, userID)
 	if err != nil {
 		return dom.Chat{}, customerrors.ErrFailedToCheck
 	}
@@ -118,11 +117,20 @@ func (c *ChatService) OpenChat(ctx context.Context,
 	userID int64) (dom.Chat,
 	[]dom.Message,
 	error) {
+
+	exists, err := c.Chat.CheckIfChatExists(ctx, chatID)
+	if err != nil {
+		return dom.Chat{}, nil, err
+	}
+	if !exists {
+		return dom.Chat{}, nil, customerrors.ErrNotFound
+	}
+
 	if chatID <= 0 {
 		return dom.Chat{}, nil, fmt.Errorf("chat service: invalid chatID: %w", customerrors.ErrInvalidInput)
 	}
 
-	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
+	isMember, err := c.Chat.UserInChat(ctx, chatID, userID)
 	if err != nil {
 		return dom.Chat{}, nil, customerrors.ErrFailedToCheck
 	}
@@ -151,21 +159,25 @@ func (c *ChatService) AddMembers(ctx context.Context, chatID int64, userID int64
 	if !c.User.CheckUserExists(ctx, userID) {
 		return customerrors.ErrUserNotFound
 	}
-
 	inChat, err := c.Chat.UserInChat(ctx, chatID, userID)
 	if err != nil {
 		return err
 	}
-	if inChat {
-		return customerrors.ErrUserAlreadyInChat
+	if !inChat {
+		return customerrors.ErrUserNotMemberOfChat
 	}
 
-	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
-	if err != nil {
-		return customerrors.ErrFailedToCheck
-	}
-	if !isMember {
-		return customerrors.ErrUserNotMemberOfChat
+	for _, memberID := range members {
+		if !c.User.CheckUserExists(ctx, memberID) {
+			return customerrors.ErrUserNotFound
+		}
+		inChat, err := c.Chat.UserInChat(ctx, chatID, memberID)
+		if err != nil {
+			return err
+		}
+		if inChat {
+			return customerrors.ErrUserAlreadyInChat
+		}
 	}
 
 	err = c.Chat.AddMembers(ctx, chatID, members)
@@ -177,7 +189,12 @@ func (c *ChatService) AddMembers(ctx context.Context, chatID int64, userID int64
 }
 
 func (c *ChatService) RemoveMember(ctx context.Context, chatID int64, userID int64) error {
-	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
+
+	if chatID <= 0 || userID <= 0 {
+		return fmt.Errorf("chat service: invalid chatID or userID: %w", customerrors.ErrInvalidInput)
+	}
+
+	isMember, err := c.Chat.UserInChat(ctx, chatID, userID)
 	if err != nil {
 		return customerrors.ErrFailedToCheck
 	}

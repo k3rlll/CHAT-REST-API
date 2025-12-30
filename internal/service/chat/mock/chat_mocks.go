@@ -70,21 +70,6 @@ func (mr *MockChatRepositoryInterfaceMockRecorder) CheckIfChatExists(ctx, chatID
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckIfChatExists", reflect.TypeOf((*MockChatRepositoryInterface)(nil).CheckIfChatExists), ctx, chatID)
 }
 
-// CheckIsMemberOfChat mocks base method.
-func (m *MockChatRepositoryInterface) CheckIsMemberOfChat(ctx context.Context, chatID, userID int64) (bool, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CheckIsMemberOfChat", ctx, chatID, userID)
-	ret0, _ := ret[0].(bool)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CheckIsMemberOfChat indicates an expected call of CheckIsMemberOfChat.
-func (mr *MockChatRepositoryInterfaceMockRecorder) CheckIsMemberOfChat(ctx, chatID, userID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckIsMemberOfChat", reflect.TypeOf((*MockChatRepositoryInterface)(nil).CheckIsMemberOfChat), ctx, chatID, userID)
-}
-
 // CreateChat mocks base method.
 func (m *MockChatRepositoryInterface) CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (int64, error) {
 	m.ctrl.T.Helper()

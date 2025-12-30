@@ -21,16 +21,6 @@ func NewChatRepository(pool *pgxpool.Pool, logger *slog.Logger) *ChatRepository 
 	}
 }
 
-func (c *ChatRepository) CheckIsMemberOfChat(ctx context.Context, chatID int64, userID int64) (bool, error) {
-	isMember := false
-	err := c.pool.QueryRow(ctx,
-		"SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2)", chatID, userID).Scan(&isMember)
-	if err != nil {
-		return false, fmt.Errorf("error checking membership: %w", err)
-	}
-	return isMember, nil
-
-}
 
 func (c *ChatRepository) CreateChat(ctx context.Context,
 	title string,

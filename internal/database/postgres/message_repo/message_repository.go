@@ -2,6 +2,7 @@ package message_repo
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	dom "main/internal/domain/entity"
 	"time"
@@ -27,7 +28,7 @@ func (m *MessageRepository) CheckMessageExists(ctx context.Context, id int64) (b
 	err := m.pool.QueryRow(ctx,
 		"SELECT EXISTS (text FROM messages WHERE id=$1)", id).Scan(&exists)
 	if err != nil {
-		m.logger.Error("failed to check if message exists", err.Error())
+		fmt.Errorf("repository:failed to check if message exists: %w", err)
 		return false, err
 	}
 	return exists, nil
@@ -36,7 +37,7 @@ func (m *MessageRepository) CheckMessageExists(ctx context.Context, id int64) (b
 func (m *MessageRepository) DeleteMessage(ctx context.Context, id int64) error {
 	_, err := m.pool.Exec(ctx, "DELETE FROM messages WHERE id=$1", id)
 	if err != nil {
-		m.logger.Error("failed to delete a message", err.Error())
+		fmt.Errorf("repository:failed to delete message: %w", err)
 		return err
 	}
 
@@ -53,7 +54,7 @@ func (m *MessageRepository) Create(
 	err := m.pool.QueryRow(ctx,
 		query, chatID, userID, senderUsername, text).Scan(&messageID)
 	if err != nil {
-		m.logger.Error("failed to create message", err.Error())
+		fmt.Errorf("repository:failed to create message: %w", err)
 		return dom.Message{}, err
 	}
 
@@ -73,7 +74,7 @@ func (m *MessageRepository) EditMessage(ctx context.Context, messageID int64, ne
 	_, err := m.pool.Exec(ctx,
 		"UPDATE messages SET text=$1 WHERE id=$2", newText, messageID)
 	if err != nil {
-		m.logger.Error("failed to edit message", err.Error())
+		fmt.Errorf("repository:failed to edit message: %w", err)
 		return err
 	}
 	return nil
