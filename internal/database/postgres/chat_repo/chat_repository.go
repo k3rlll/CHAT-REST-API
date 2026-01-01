@@ -21,38 +21,30 @@ func NewChatRepository(pool *pgxpool.Pool, logger *slog.Logger) *ChatRepository 
 	}
 }
 
-
 func (c *ChatRepository) CreateChat(ctx context.Context,
 	title string,
 	isPrivate bool,
 	membersID []int64) (int64, error) {
 
 	var chatId int64
-	var username string
-
-	if len(membersID) == 1 {
-		_, err := c.pool.Exec(ctx,
-			"select username from users where user_id=$1", membersID[0])
-		if err != nil {
-
-			return 0, fmt.Errorf("failed to select username: %w", err)
-		}
-	}
-
-	if len(membersID) == 2 {
-		err := c.pool.QueryRow(ctx,
-			"SELECT username FROM users WHERE user_id=$1", membersID[1]).Scan(&username)
-		if err != nil {
-			return 0, fmt.Errorf("failed to select username: %w", err)
-		}
-	}
 
 	tx, err := c.pool.Begin(ctx)
 	if err != nil {
 		return 0, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
+	if title == "" {
+		for _, userID := range membersID {
+			var username string
+			err := tx.QueryRow(ctx,
+				"SELECT username FROM users WHERE id=$1", userID).Scan(&username)
+			if err != nil {
+				return 0, fmt.Errorf("chat repository: failed to select username: %w", err)
+			}
+			title += username + ", "
+		}
 
+	}
 	err = tx.QueryRow(ctx,
 		"INSERT INTO chats (title, is_private) VALUES ($1, $2) RETURNING id", title, isPrivate).Scan(&chatId)
 	if err != nil {
@@ -174,17 +166,25 @@ func (c *ChatRepository) OpenChat(ctx context.Context, chatID int64, userID int6
 }
 
 func (c *ChatRepository) AddMembers(ctx context.Context, chatID int64, members []int64) error {
+	tx, err := c.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("repository: failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback(ctx)
 	for _, userID := range members {
-		_, err := c.pool.Exec(ctx,
+		_, err := tx.Exec(ctx,
 			"INSERT INTO chat_members (chat_id, user_id) VALUES ($1, $2)", chatID, userID)
 		if err != nil {
 			return fmt.Errorf("repository: failed to insert chat member: %w", err)
 		}
 	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("repository: failed to commit transaction: %w", err)
+	}
 	return nil
 }
 
-func (c *ChatRepository) UserInChat(ctx context.Context, chatID int64, userID int64) (bool, error) {
+func (c *ChatRepository) CheckIsMemberOfChat(ctx context.Context, chatID int64, userID int64) (bool, error) {
 	isMember := false
 	query := "SELECT EXISTS (SELECT 1 FROM chat_members WHERE chat_id=$1 AND user_id=$2)"
 	err := c.pool.QueryRow(ctx,

@@ -234,7 +234,7 @@ func TestOpenChat(t *testing.T) {
 			chatID: chatID,
 			userID: userID,
 			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
-				chatRepo.EXPECT().UserInChat(gomock.Any(), chatID, userID).Return(true, nil)
+				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(true, nil)
 				chatRepo.EXPECT().GetChatDetails(gomock.Any(), chatID).Return(dom.Chat{
 					Id:               chatID,
 					Title:            testChat.Title,
@@ -256,7 +256,7 @@ func TestOpenChat(t *testing.T) {
 			chatID: chatID,
 			userID: userID,
 			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
-				chatRepo.EXPECT().UserInChat(gomock.Any(), chatID, userID).Return(true, nil)
+				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(true, nil)
 				chatRepo.EXPECT().GetChatDetails(gomock.Any(), chatID).Return(dom.Chat{}, customerrors.ErrDatabase)
 			},
 			expectedChat:  dom.Chat{},
@@ -279,7 +279,7 @@ func TestOpenChat(t *testing.T) {
 			chatID: chatID,
 			userID: userID,
 			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
-				chatRepo.EXPECT().UserInChat(gomock.Any(), chatID, userID).Return(false, nil)
+				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(false, nil)
 			},
 			isMemberExpect:   false,
 			expectedChat:     dom.Chat{},
@@ -292,7 +292,7 @@ func TestOpenChat(t *testing.T) {
 			chatID: chatID,
 			userID: userID,
 			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
-				chatRepo.EXPECT().UserInChat(gomock.Any(), chatID, userID).Return(false, customerrors.ErrFailedToCheck)
+				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(false, customerrors.ErrFailedToCheck)
 			},
 			isMemberExpect:   false,
 			expectedChat:     dom.Chat{},
@@ -345,13 +345,13 @@ func TestAddMembers(t *testing.T) {
 			mockBehavior: func(chatRepo *MockChatRepositoryInterface, userSvc *MockUserInterface) {
 				//проверка инициатора на членство в чате
 				userSvc.EXPECT().CheckUserExists(gomock.Any(), userID).Return(true)
-				chatRepo.EXPECT().UserInChat(gomock.Any(), chatID, userID).Return(true, nil)
+				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(true, nil)
 				//проверка каждого нового участника на существование и членство в чате
 				userSvc.EXPECT().CheckUserExists(gomock.Any(), testMembers[0]).Return(true)
-				chatRepo.EXPECT().UserInChat(gomock.Any(), chatID, testMembers[0]).Return(false, nil)
+				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, testMembers[0]).Return(false, nil)
 
 				userSvc.EXPECT().CheckUserExists(gomock.Any(), testMembers[1]).Return(true)
-				chatRepo.EXPECT().UserInChat(gomock.Any(), chatID, testMembers[1]).Return(false, nil)
+				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, testMembers[1]).Return(false, nil)
 
 				chatRepo.EXPECT().AddMembers(gomock.Any(), chatID, testMembers).Return(nil)
 			},
@@ -377,7 +377,7 @@ func TestAddMembers(t *testing.T) {
 			members: testMembers,
 			mockBehavior: func(chatRepo *MockChatRepositoryInterface, userSvc *MockUserInterface) {
 				userSvc.EXPECT().CheckUserExists(gomock.Any(), userID).Return(true)
-				chatRepo.EXPECT().UserInChat(gomock.Any(), chatID, userID).Return(false, nil)
+				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(false, nil)
 			},
 			expectedError: customerrors.ErrUserNotMemberOfChat,
 			isErr:         true,
@@ -389,7 +389,7 @@ func TestAddMembers(t *testing.T) {
 			members: testMembers,
 			mockBehavior: func(chatRepo *MockChatRepositoryInterface, userSvc *MockUserInterface) {
 				userSvc.EXPECT().CheckUserExists(gomock.Any(), userID).Return(true)
-				chatRepo.EXPECT().UserInChat(gomock.Any(), chatID, userID).Return(true, nil)
+				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(true, nil)
 				//проверка каждого нового участника на существование и членство в чате
 				userSvc.EXPECT().CheckUserExists(gomock.Any(), testMembers[0]).Return(false)
 			},
@@ -403,10 +403,10 @@ func TestAddMembers(t *testing.T) {
 			members: testMembers,
 			mockBehavior: func(chatRepo *MockChatRepositoryInterface, userSvc *MockUserInterface) {
 				userSvc.EXPECT().CheckUserExists(gomock.Any(), userID).Return(true)
-				chatRepo.EXPECT().UserInChat(gomock.Any(), chatID, userID).Return(true, nil)
+				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(true, nil)
 				//проверка каждого нового участника на существование и членство в чате
 				userSvc.EXPECT().CheckUserExists(gomock.Any(), testMembers[0]).Return(true)
-				chatRepo.EXPECT().UserInChat(gomock.Any(), chatID, testMembers[0]).Return(true, nil)
+				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, testMembers[0]).Return(true, nil)
 			},
 			expectedError: customerrors.ErrUserAlreadyInChat,
 			isErr:         true,
@@ -451,7 +451,7 @@ func TestRemoveMember(t *testing.T) {
 			chatID: chatID,
 			userID: userID,
 			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
-				chatRepo.EXPECT().UserInChat(gomock.Any(), chatID, userID).Return(true, nil)
+				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(true, nil)
 				chatRepo.EXPECT().RemoveMember(gomock.Any(), chatID, userID).Return(nil)
 			},
 			expectedError: nil,
@@ -462,7 +462,7 @@ func TestRemoveMember(t *testing.T) {
 			chatID: chatID,
 			userID: userID,
 			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
-				chatRepo.EXPECT().UserInChat(gomock.Any(), chatID, userID).Return(false, nil)
+				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(false, nil)
 			},
 			expectedError: customerrors.ErrUserNotMemberOfChat,
 			isErr:         true,
@@ -482,7 +482,7 @@ func TestRemoveMember(t *testing.T) {
 			chatID: chatID,
 			userID: userID,
 			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
-				chatRepo.EXPECT().UserInChat(gomock.Any(), chatID, userID).Return(false, customerrors.ErrFailedToCheck)
+				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(false, customerrors.ErrFailedToCheck)
 			},
 			expectedError: customerrors.ErrFailedToCheck,
 			isErr:         true,

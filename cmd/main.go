@@ -24,11 +24,12 @@ import (
 	srvChat "main/internal/service/chat"
 	srvMessage "main/internal/service/message"
 	srvUser "main/internal/service/user"
+	httpHandler "main/internal/transport/handlers"
 	AuthHandler "main/internal/transport/handlers/auth"
 	ChatHandler "main/internal/transport/handlers/chat"
 	MessageHandler "main/internal/transport/handlers/message"
 	UserHandler "main/internal/transport/handlers/user"
-	httpHandler "main/internal/transport/handlers"
+	"main/internal/transport/ws"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
@@ -91,6 +92,8 @@ func main() {
 	chatService := srvChat.NewChatService(userRepo, chatRepo, logger)
 	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, logger)
 
+	wsManager := ws.NewManager(logger)
+
 	upgrader := websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
@@ -116,8 +119,8 @@ func main() {
 
 	userHandler := UserHandler.NewUserHandler(userService, authService, upgrader, NewJWTFacade, logger)
 	authHandler := AuthHandler.NewAuthHandler(authService, NewJWTFacade, logger)
-	chatHandler := ChatHandler.NewChatHandler(messageService, chatService, logger, NewJWTFacade )
-	messageHandler := MessageHandler.NewMessageHandler(messageService, chatService, logger, NewJWTFacade)
+	chatHandler := ChatHandler.NewChatHandler(messageService, chatService, logger, NewJWTFacade)
+	messageHandler := MessageHandler.NewMessageHandler(messageService, chatService, logger, wsManager, NewJWTFacade)
 
 	HTTP := httpHandler.NewHTTPHandler(userHandler, authHandler, chatHandler, messageHandler, logger)
 

@@ -17,7 +17,7 @@ type MessageInterface interface {
 	EditMessage(ctx context.Context, messageID int64, newText string) error
 	DeleteMessage(ctx context.Context, messageID int64) error
 	CheckMessageExists(ctx context.Context, messageID int64) (bool, error)
-	ListByChat(ctx context.Context, chatID int64) ([]dom.Message, error)
+	ListByChat(ctx context.Context, chatID int64, limit, lastMessage int) ([]dom.Message, error)
 }
 
 type MessageService struct {
@@ -87,6 +87,8 @@ func (m *MessageService) EditMessage(ctx context.Context, messageID int64, newTe
 
 }
 
-func (m *MessageService) ListMessages(ctx context.Context, chatID int64) ([]dom.Message, error) {
-	return m.Message.ListByChat(ctx, chatID)
+func (m *MessageService) ListMessages(ctx context.Context, chatID int64, limit, lastMessage int) ([]dom.Message, error) {
+	
+	
+	return m.Message.ListByChat(ctx, chatID, limit, lastMessage)
 }

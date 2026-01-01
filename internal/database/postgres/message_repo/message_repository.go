@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	dom "main/internal/domain/entity"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -26,10 +25,9 @@ func (m *MessageRepository) CheckMessageExists(ctx context.Context, id int64) (b
 	exists := false
 
 	err := m.pool.QueryRow(ctx,
-		"SELECT EXISTS (text FROM messages WHERE id=$1)", id).Scan(&exists)
+		"SELECT EXISTS (SELECT 1 FROM messages WHERE id=$1)", id).Scan(&exists)
 	if err != nil {
-		fmt.Errorf("repository:failed to check if message exists: %w", err)
-		return false, err
+		return false, fmt.Errorf("repository:failed to check if message exists: %w", err)
 	}
 	return exists, nil
 }
@@ -37,8 +35,7 @@ func (m *MessageRepository) CheckMessageExists(ctx context.Context, id int64) (b
 func (m *MessageRepository) DeleteMessage(ctx context.Context, id int64) error {
 	_, err := m.pool.Exec(ctx, "DELETE FROM messages WHERE id=$1", id)
 	if err != nil {
-		fmt.Errorf("repository:failed to delete message: %w", err)
-		return err
+		return fmt.Errorf("repository:failed to delete message: %w", err)
 	}
 
 	return nil
@@ -54,18 +51,18 @@ func (m *MessageRepository) Create(
 	err := m.pool.QueryRow(ctx,
 		query, chatID, userID, senderUsername, text).Scan(&messageID)
 	if err != nil {
-		fmt.Errorf("repository:failed to create message: %w", err)
-		return dom.Message{}, err
+
+		return dom.Message{}, fmt.Errorf("repository:failed to create message: %w", err)
 	}
 
 	var res = dom.Message{
-		Id:             messageID,
 		Text:           text,
-		CreatedAt:      time.Now(),
 		ChatID:         chatID,
 		SenderID:       userID,
 		SenderUsername: senderUsername,
 	}
+	err = m.pool.QueryRow(ctx, query, chatID, userID, senderUsername, text).
+		Scan(&res.Id, &res.CreatedAt)
 
 	return res, nil
 }
@@ -74,30 +71,39 @@ func (m *MessageRepository) EditMessage(ctx context.Context, messageID int64, ne
 	_, err := m.pool.Exec(ctx,
 		"UPDATE messages SET text=$1 WHERE id=$2", newText, messageID)
 	if err != nil {
-		fmt.Errorf("repository:failed to edit message: %w", err)
-		return err
+		return fmt.Errorf("repository:failed to edit message: %w", err)
 	}
 	return nil
 }
 
-func (m *MessageRepository) ListByChat(ctx context.Context, chatID int64) ([]dom.Message, error) {
-	rows, err := m.pool.Query(ctx,
-		`SELECT id, chat_id, sender_id, sender_username, text, created_at
-		   FROM messages
-		  WHERE chat_id = $1
-		  ORDER BY created_at DESC`, chatID)
+func (m *MessageRepository) ListByChat(ctx context.Context, chatID int64, limit, lastMessage int) ([]dom.Message, error) {
+
+	query := `
+		SELECT id, chat_id, sender_id, sender_username, text, created_at
+		FROM messages
+		WHERE chat_id = $1 AND id < $2
+		ORDER BY created_at DESC
+		LIMIT $3`
+
+	rows, err := m.pool.Query(ctx, query, chatID, lastMessage, limit)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("repository: failed to list messages: %w", err)
 	}
 	defer rows.Close()
 
-	var out []dom.Message
+	out := make([]dom.Message, 0, limit)
+
 	for rows.Next() {
 		var m dom.Message
 		if err := rows.Scan(&m.Id, &m.ChatID, &m.SenderID, &m.SenderUsername, &m.Text, &m.CreatedAt); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("scan error: %w", err)
 		}
 		out = append(out, m)
 	}
-	return out, rows.Err()
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows iteration error: %w", err)
+	}
+
+	return out, nil
 }
