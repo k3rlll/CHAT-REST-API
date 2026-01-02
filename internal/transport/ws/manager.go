@@ -27,12 +27,18 @@ func NewManager(logger *slog.Logger) *Manager {
 	}
 }
 
-func (m *Manager) HandleConnection(w http.ResponseWriter, r *http.Request) (*websocket.Conn, error) {
+func (m *Manager) HandleConnection(w http.ResponseWriter, r *http.Request, userID int64) (*websocket.Conn, error) {
 	conn, err := m.upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		m.logger.Error("failed to upgrade connection", "error", err)
 		return nil, err
 	}
+
+	m.mu.Lock()
+	m.clients[userID] = conn
+	m.mu.Unlock()
+
+	m.logger.Info("User connected via WS", "userID", userID)
 
 	defer func() {
 		if err := conn.Close(); err != nil {
@@ -51,7 +57,7 @@ func (m *Manager) HandleConnection(w http.ResponseWriter, r *http.Request) (*web
 	return conn, nil
 }
 
-func (m *Manager) WsSendMessage(userID int64, data interface{}) {
+func (m *Manager) WsUnicast(userID int64, data interface{}) {
 	m.mu.RLock()
 	conn, ok := m.clients[userID]
 	m.mu.RUnlock()

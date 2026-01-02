@@ -139,16 +139,16 @@ func (mr *MockMessageInterfaceMockRecorder) EditMessage(ctx, messageID, newText 
 }
 
 // ListByChat mocks base method.
-func (m *MockMessageInterface) ListByChat(ctx context.Context, chatID int64) ([]entity.Message, error) {
+func (m *MockMessageInterface) ListByChat(ctx context.Context, chatID int64, limit, lastMessage int) ([]entity.Message, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListByChat", ctx, chatID)
+	ret := m.ctrl.Call(m, "ListByChat", ctx, chatID, limit, lastMessage)
 	ret0, _ := ret[0].([]entity.Message)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListByChat indicates an expected call of ListByChat.
-func (mr *MockMessageInterfaceMockRecorder) ListByChat(ctx, chatID any) *gomock.Call {
+func (mr *MockMessageInterfaceMockRecorder) ListByChat(ctx, chatID, limit, lastMessage any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByChat", reflect.TypeOf((*MockMessageInterface)(nil).ListByChat), ctx, chatID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListByChat", reflect.TypeOf((*MockMessageInterface)(nil).ListByChat), ctx, chatID, limit, lastMessage)
 }

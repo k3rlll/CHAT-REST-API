@@ -8,13 +8,22 @@ import (
 	mwMiddleware "main/internal/server/middleware"
 	"main/internal/transport/ws"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi"
 )
 
-type ListDTO struct {
-	ChatID      int64 `json:"chat_id"`
-	LastMessage int   `json:"last_message"`
+type EditMessageDTO struct {
+	MessageID int64  `json:"message_id"`
+	SenderID  int64  `json:"sender_id"`
+	ChatID    int64  `json:"chat_id"`
+	NewText   string `json:"new_text"`
+}
+
+type DeleteMessageDTO struct {
+	MessageID int64 `json:"message_id"`
+	ChatID    int64 `json:"chat_id"`
+	UserID    int64 `json:"user_id"`
 }
 
 type MessageService interface {
@@ -27,7 +36,7 @@ type ChatService interface {
 	CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (dom.Chat, error)
 	AddMembers(ctx context.Context, chatID, userID int64, members []int64) error
 	RemoveMember(ctx context.Context, chatID, userID int64) error
-	GetChatDetails(ctx context.Context, chatID, userID int64, members []int64) ([]int64, error)
+	GetChatDetails(ctx context.Context, chatID int64, userID int64) (dom.Chat, error)
 }
 
 type JWTManager interface {
@@ -69,6 +78,25 @@ func (h *MessageHandler) RegisterRoutes(r chi.Router) {
 		r.Get("/", h.ListMessageHandlers)
 		r.Put("/{msg_id}", h.EditMessage)
 	})
+
+	r.Get("/ws", h.ConnectWebSocket)
+}
+
+func (h *MessageHandler) ConnectWebSocket(w http.ResponseWriter, r *http.Request) {
+	tokenString := r.URL.Query().Get("token")
+	if tokenString == "" {
+		http.Error(w, "token required", http.StatusUnauthorized)
+		return
+	}
+
+	userID, err := h.Manager.Parse(tokenString)
+	if err != nil {
+		h.logger.Error("ws auth failed", "error", err)
+		http.Error(w, "invalid token", http.StatusUnauthorized)
+		return
+	}
+
+	h.upgrader.HandleConnection(w, r, userID)
 }
 
 // pattern: /v1/chats/id/messages
@@ -96,8 +124,8 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go func() {
-		membersId, err := h.ChatSrv.GetChatDetails(r.Context(), request.ChatID, request.SenderID, nil)
+	go func(ctx context.Context, chatID int64, senderID int64) {
+		membersId, err := h.ChatSrv.GetChatDetails(ctx, chatID, senderID)
 		if err != nil {
 			h.logger.Error("failed to get chat members", slog.Any("error", err.Error()))
 			return
@@ -108,14 +136,14 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 			"data": message,
 		}
 
-		for _, memberID := range membersId {
+		for _, memberID := range membersId.MembersID {
 			if memberID == request.SenderID {
 				continue
 			}
-			h.upgrader.WsSendMessage(memberID, wsPayload)
+			h.upgrader.WsUnicast(memberID, wsPayload)
 		}
 
-	}()
+	}(context.Background(), request.ChatID, request.SenderID)
 
 	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
@@ -124,29 +152,10 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 
 // pattern: /v1/chats/id/messages/{msg_id}
 // method:  DELETE
-// info:    Удалить сообщение в чате
+// info:    Delete message by ID
 func (h *MessageHandler) DeleteMessageHandler(w http.ResponseWriter, r *http.Request) {
 
-	var MessageID dom.Message
-
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&MessageID); err != nil {
-		h.logger.Error("failed to decode request", slog.Any("error", err.Error()))
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	if err := h.MessSrv.DeleteMessage(r.Context(), MessageID.Id); err != nil {
-		h.logger.Error("failed to delete message", slog.Any("error", err.Error()))
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-	w.WriteHeader(http.StatusOK)
-}
-
-func (h *MessageHandler) EditMessage(w http.ResponseWriter, r *http.Request) {
-	var request dom.Message
+	var request DeleteMessageDTO
 
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
@@ -155,44 +164,104 @@ func (h *MessageHandler) EditMessage(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	if err := h.MessSrv.EditMessage(r.Context(), request.Id, request.Text); err != nil {
-		h.logger.Error("failed to edit message", slog.Any("error", err.Error()))
+
+	if err := h.MessSrv.DeleteMessage(r.Context(), request.MessageID); err != nil {
+		h.logger.Error("failed to delete message", slog.Any("error", err.Error()))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+
+	go func(ctx context.Context, chatID int64, userID int64) {
+		membersId, err := h.ChatSrv.GetChatDetails(ctx, chatID, userID)
+		if err != nil {
+			h.logger.Error("failed to get chat members", slog.Any("error", err.Error()))
+			return
+		}
+		wsPayload := map[string]interface{}{
+			"type": "delete_message",
+			"data": request,
+		}
+		for _, memberID := range membersId.MembersID {
+			h.upgrader.WsUnicast(memberID, wsPayload)
+		}
+
+	}(context.Background(), request.ChatID, request.UserID)
+
 	w.WriteHeader(http.StatusOK)
 }
 
-func (h *MessageHandler) ListMessageHandlers(w http.ResponseWriter, r *http.Request) {
-
-	var chatID ListDTO
+// pattern: /v1/chats/id/messages/{msg_id}
+// method:  PUT
+// info:    Edit message by ID
+func (h *MessageHandler) EditMessage(w http.ResponseWriter, r *http.Request) {
+	var request EditMessageDTO
 
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
-	err := dec.Decode(&chatID)
-	if err != nil {
+	if err := dec.Decode(&request); err != nil {
 		h.logger.Error("failed to decode request", slog.Any("error", err.Error()))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	messages, err := h.MessSrv.ListMessages(r.Context(), chatID.ChatID, 50, chatID.LastMessage)
+	if err := h.MessSrv.EditMessage(r.Context(), request.MessageID, request.NewText); err != nil {
+		h.logger.Error("failed to edit message", slog.Any("error", err.Error()))
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+
+	go func(ctx context.Context, chatID int64, userID int64) {
+		membersId, err := h.ChatSrv.GetChatDetails(ctx, chatID, userID)
+		if err != nil {
+			h.logger.Error("failed to get chat members", slog.Any("error", err.Error()))
+			return
+		}
+
+		wsPayload := map[string]interface{}{
+			"type": "edit_message",
+			"data": request,
+		}
+		for _, memberID := range membersId.MembersID {
+			if memberID == userID {
+				continue
+			}
+			h.upgrader.WsUnicast(memberID, wsPayload)
+		}
+	}(context.Background(), request.ChatID, request.SenderID)
+
+}
+
+func (h *MessageHandler) ListMessageHandlers(w http.ResponseWriter, r *http.Request) {
+
+	chatIDStr := chi.URLParam(r, "id")
+	lastMsgStr := r.URL.Query().Get("last_message")
+
+	strconvID, err := strconv.ParseInt(chatIDStr, 10, 64)
+	if err != nil {
+		h.logger.Error("failed to parse chat id", slog.Any("error", err.Error()))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	lastMessage, err := strconv.Atoi(lastMsgStr)
+	if err != nil && lastMsgStr != "" {
+		h.logger.Error("failed to parse last message", slog.Any("error", err.Error()))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	messages, err := h.MessSrv.ListMessages(r.Context(), strconvID, 50, lastMessage)
 	if err != nil {
 		h.logger.Error("failed to list messages", slog.Any("error", err.Error()))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-
-	b, err := json.MarshalIndent(messages, "", "	")
+	w.Header().Set("Content-Type", "application/json")
+	err = json.NewEncoder(w).Encode(messages)
 	if err != nil {
-		h.logger.Error("failed to marshal messages", slog.Any("error", err.Error()))
+		h.logger.Error("failed to encode response", slog.Any("error", err.Error()))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	_, err = w.Write(b)
-	if err != nil {
-		h.logger.Error("failed to write response", slog.Any("error", err.Error()))
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	w.WriteHeader(http.StatusOK)
 }

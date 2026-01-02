@@ -34,7 +34,6 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
-	"github.com/gorilla/websocket"
 )
 
 const (
@@ -93,15 +92,6 @@ func main() {
 	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, logger)
 
 	wsManager := ws.NewManager(logger)
-
-	upgrader := websocket.Upgrader{
-		ReadBufferSize:  1024,
-		WriteBufferSize: 1024,
-		CheckOrigin: func(r *http.Request) bool {
-			return true
-		},
-	}
-
 	logger.Info("Connected to database successfully")
 
 	router.Use(middleware.RequestID)
@@ -117,7 +107,7 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	userHandler := UserHandler.NewUserHandler(userService, authService, upgrader, NewJWTFacade, logger)
+	userHandler := UserHandler.NewUserHandler(userService, authService, NewJWTFacade, logger)
 	authHandler := AuthHandler.NewAuthHandler(authService, NewJWTFacade, logger)
 	chatHandler := ChatHandler.NewChatHandler(messageService, chatService, logger, NewJWTFacade)
 	messageHandler := MessageHandler.NewMessageHandler(messageService, chatService, logger, wsManager, NewJWTFacade)

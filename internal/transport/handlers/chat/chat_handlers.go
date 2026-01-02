@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	dom "main/internal/domain/entity"
+	"strconv"
 
 	"main/internal/pkg/customerrors"
 	mwMiddleware "main/internal/server/middleware"
@@ -28,7 +29,7 @@ type UserService interface {
 type MessageService interface {
 	SendMessage(ctx context.Context, chatID int64, userID int64, senderUsername string, text string) (dom.Message, error)
 	DeleteMessage(ctx context.Context, msgID int64) error
-	ListMessages(ctx context.Context, chatID int64) ([]dom.Message, error)
+	ListMessages(ctx context.Context, chatID int64, limit, lastMessage int) ([]dom.Message, error)
 }
 
 type ChatService interface {
@@ -50,6 +51,7 @@ func NewChatHandler(
 	chatSrv ChatService,
 	logger *slog.Logger,
 	tokenManager JWTManager,
+
 ) *ChatHandler {
 	return &ChatHandler{
 		MessSrv: messSrv,
@@ -65,9 +67,9 @@ func (h *ChatHandler) RegisterRoutes(r chi.Router) {
 		r.Use(mwMiddleware.JWTAuth(h.Manager))
 		r.Post("/", h.CreateChatHandler)
 		r.Get("/", h.GetChatsHandler)
-		r.Get("/{id}", h.OpenChatHandler)
-		r.Delete("/{id}", h.DeleteChatHandler)
-		r.Post("/{id}/members", h.AddMembersHandler)
+		r.Get("/{chat_id}", h.OpenChatHandler)
+		r.Delete("/{chat_id}", h.DeleteChatHandler)
+		r.Post("/{chat_id}/members", h.AddMembersHandler)
 	})
 }
 
@@ -103,12 +105,8 @@ func (h *ChatHandler) CreateChatHandler(w http.ResponseWriter, r *http.Request) 
 
 func (h *ChatHandler) GetChatsHandler(w http.ResponseWriter, r *http.Request) {
 
-	var userId int64
-	if err := json.NewDecoder(r.Body).Decode(&userId); err != nil {
-		h.logger.Error("failed to decode request", slog.String("error", err.Error()))
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
+	yuserIdStr := r.URL.Query().Get("user_id")
+	userId, err := strconv.ParseInt(yuserIdStr, 10, 64)
 
 	chats, err := h.ChatSrv.ListOfChats(r.Context(), userId)
 	if err != nil {
@@ -131,20 +129,17 @@ func (h *ChatHandler) GetChatsHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// pattern: /v1/chats/{id}
+// pattern: /v1/chats/{id}/
 // method:  GET
 // info:    Детали чата (если участник)
 
 func (h *ChatHandler) OpenChatHandler(w http.ResponseWriter, r *http.Request) {
 
-	var requestData map[string]int64
-	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
-		h.logger.Error("failed to decode request", slog.String("error", err.Error()))
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	chatID := requestData["chat_id"]
-	userID := requestData["user_id"]
+	chatIDStr := chi.URLParam(r, "id")
+	userIDStr := r.URL.Query().Get("user_id")
+
+	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
 
 	chat, messages, err := h.ChatSrv.OpenChat(r.Context(), chatID, userID)
 	if err != nil {
@@ -211,26 +206,9 @@ func (h *ChatHandler) DeleteChatHandler(w http.ResponseWriter, r *http.Request) 
 
 }
 
-// pattern: /v1/chats/{id}/members
-// method:  GET
-// info:    Список участников чата
-
-// succeed:
-//   - status code: 200 OK
-//   - response body: JSON { items:[{ user, role }], total }
-
-// failed:
-//   - status code: 401 Unauthorized
-//   - status code: 403 Forbidden
-//   - status code: 404 Not Found
-//   - status code: 500 Internal Server Error
-//   - response body: JSON error + time
-
-// func getListMembersHandler(w http.ResponseWriter, r *http.Request) {}
-
-// pattern: /v1/chats/{id}/members
+// pattern: /v1/chats/{chat_id}/members
 // method:  POST
-// info:    Добавить участника(ов) в групповой чат
+// info:    Add members to chat
 
 func (h *ChatHandler) AddMembersHandler(w http.ResponseWriter, r *http.Request) {
 	var requestData struct {

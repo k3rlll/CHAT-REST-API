@@ -11,7 +11,6 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi"
-	"github.com/gorilla/websocket"
 )
 
 type UserService interface {
@@ -31,83 +30,70 @@ type UserHandler struct {
 	UserSrv UserService
 	AuthSrv AuthService
 
-	upgrader     websocket.Upgrader
 	tokenManager JWTManager
 	logger       *slog.Logger
 }
 
 func NewUserHandler(userSrv UserService,
 	authSrv AuthService,
-	upgrader websocket.Upgrader,
 	tokenManager JWTManager,
 	logger *slog.Logger) *UserHandler {
 	return &UserHandler{
 		UserSrv:      userSrv,
 		AuthSrv:      authSrv,
-		upgrader:     websocket.Upgrader{},
 		tokenManager: tokenManager,
 		logger:       logger,
 	}
 }
 
+type registrationDTO struct {
+	Username string `json:"username"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
 func (h *UserHandler) RegisterRoutes(r chi.Router) {
 
 	r.Post("/registration", h.RegisterHandler)
-	r.Get("/search", h.usersSearchWS)
 
 	r.Group(func(r chi.Router) {
 		r.Use(mwMiddleware.JWTAuth(h.tokenManager))
-		r.Get("/search", h.usersSearchWS)
+		r.Get("/search", h.usersSearch)
 	})
 }
 
-func (h *UserHandler) usersSearchWS(w http.ResponseWriter, r *http.Request) {
-	conn, err := h.upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		h.logger.Error("failed to upgrade connection", slog.String("error", err.Error()))
-		h.logger.Info("handler", slog.String("handler", "usersSearchWS"))
-		http.Error(w, "Failed to upgrade connection", http.StatusInternalServerError)
+func (h *UserHandler) usersSearch(w http.ResponseWriter, r *http.Request) {
+
+	query := r.URL.Query().Get("query")
+	if query == "" {
+		http.Error(w, "query parameter is required", http.StatusBadRequest)
 		return
 	}
-	defer conn.Close()
-
-	for {
-		_, message, err := conn.ReadMessage()
-		if err != nil {
-			h.logger.Error("failed to read message", slog.String("error", err.Error()))
-			return
-		}
-		h.logger.Info("received message", slog.String("message", string(message)))
-
-		var req string
-
-		if err := json.Unmarshal(message, &req); err != nil {
-			h.logger.Error("failed to unmarshal message", slog.String("error", err.Error()))
-			return
-		}
-
-		result, err := h.UserSrv.SearchUser(r.Context(), req)
-		if err != nil {
-			h.logger.Error("failed to search users", slog.String("error", err.Error()))
-			return
-		}
-		if len(result) > 0 {
-			h.logger.Info("users search results retrieved successfully", slog.String("handler", "usersSearchWS"))
-		} else {
-			h.logger.Info("no users found", slog.String("handler", "usersSearchWS"))
-		}
-
-		err = conn.WriteJSON(result)
-		if err != nil {
-			h.logger.Error("failed to write message", slog.String("error", err.Error()))
-			return
-		}
+	users, err := h.UserSrv.SearchUser(r.Context(), query)
+	if err != nil {
+		h.logger.Error("failed to search users", slog.String("error", err.Error()))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
 	}
+
+	b, err := json.MarshalIndent(users, "", "  ")
+	if err != nil {
+		h.logger.Error("failed to marshal response", slog.String("error", err.Error()))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write(b); err != nil {
+		h.logger.Error("failed to write response", slog.String("error", err.Error()))
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+
 }
 
 func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 
-	var u dom.User
+	var u registrationDTO
 
 	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
 		h.logger.Error("failed to decode request", slog.String("error", err.Error()))

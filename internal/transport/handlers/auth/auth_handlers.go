@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
 	mwMiddleware "main/internal/server/middleware"
 	"net/http"
@@ -32,6 +31,11 @@ type JWTManager interface {
 	Parse(string) (int64, error)
 }
 
+type loginDTO struct {
+	ID       int64  `json:"user_id"`
+	Password string `json:"password"`
+}
+
 func NewAuthHandler(
 	authSrv AuthService,
 	tokenManager JWTManager,
@@ -53,7 +57,7 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 }
 
 func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
-	var u dom.User
+	var u loginDTO
 
 	if err := json.NewDecoder(r.Body).Decode(&u); err != nil {
 		h.logger.Error("failed to decode request", slog.String("error", err.Error()))
