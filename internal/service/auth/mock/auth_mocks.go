@@ -57,32 +57,47 @@ func (mr *MockAuthRepositoryMockRecorder) DeleteRefreshToken(ctx, userID any) *g
 }
 
 // GetPasswordHash mocks base method.
-func (m *MockAuthRepository) GetPasswordHash(ctx context.Context, refreshToken string, userID int64, password string) (entity.User, error) {
+func (m *MockAuthRepository) GetPasswordHash(ctx context.Context, userID int64, password string) (entity.User, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetPasswordHash", ctx, refreshToken, userID, password)
+	ret := m.ctrl.Call(m, "GetPasswordHash", ctx, userID, password)
 	ret0, _ := ret[0].(entity.User)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetPasswordHash indicates an expected call of GetPasswordHash.
-func (mr *MockAuthRepositoryMockRecorder) GetPasswordHash(ctx, refreshToken, userID, password any) *gomock.Call {
+func (mr *MockAuthRepositoryMockRecorder) GetPasswordHash(ctx, userID, password any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPasswordHash", reflect.TypeOf((*MockAuthRepository)(nil).GetPasswordHash), ctx, refreshToken, userID, password)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPasswordHash", reflect.TypeOf((*MockAuthRepository)(nil).GetPasswordHash), ctx, userID, password)
+}
+
+// GetRefreshToken mocks base method.
+func (m *MockAuthRepository) GetRefreshToken(ctx context.Context, userID int64) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRefreshToken", ctx, userID)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRefreshToken indicates an expected call of GetRefreshToken.
+func (mr *MockAuthRepositoryMockRecorder) GetRefreshToken(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRefreshToken", reflect.TypeOf((*MockAuthRepository)(nil).GetRefreshToken), ctx, userID)
 }
 
 // SaveRefreshToken mocks base method.
-func (m *MockAuthRepository) SaveRefreshToken(ctx context.Context, userID int64, refreshToken string) error {
+func (m *MockAuthRepository) SaveRefreshToken(ctx context.Context, refreshToken entity.RefreshToken) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SaveRefreshToken", ctx, userID, refreshToken)
+	ret := m.ctrl.Call(m, "SaveRefreshToken", ctx, refreshToken)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SaveRefreshToken indicates an expected call of SaveRefreshToken.
-func (mr *MockAuthRepositoryMockRecorder) SaveRefreshToken(ctx, userID, refreshToken any) *gomock.Call {
+func (mr *MockAuthRepositoryMockRecorder) SaveRefreshToken(ctx, refreshToken any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveRefreshToken", reflect.TypeOf((*MockAuthRepository)(nil).SaveRefreshToken), ctx, userID, refreshToken)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveRefreshToken", reflect.TypeOf((*MockAuthRepository)(nil).SaveRefreshToken), ctx, refreshToken)
 }
 
 // MockSetInterface is a mock of SetInterface interface.
@@ -175,4 +190,19 @@ func (m *MockToken) NewRefreshToken() (string, error) {
 func (mr *MockTokenMockRecorder) NewRefreshToken() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewRefreshToken", reflect.TypeOf((*MockToken)(nil).NewRefreshToken))
+}
+
+// Parse mocks base method.
+func (m *MockToken) Parse(accessToken string) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Parse", accessToken)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Parse indicates an expected call of Parse.
+func (mr *MockTokenMockRecorder) Parse(accessToken any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Parse", reflect.TypeOf((*MockToken)(nil).Parse), accessToken)
 }

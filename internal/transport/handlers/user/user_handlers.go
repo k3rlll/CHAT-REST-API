@@ -17,9 +17,6 @@ type UserService interface {
 	RegisterUser(ctx context.Context, username, email, password string) (dom.User, error)
 	SearchUser(ctx context.Context, query string) ([]dom.User, error)
 }
-type AuthService interface {
-	LoginUser(ctx context.Context, userID int64, password string) (accessToken string, refreshToken string, err error)
-}
 
 type JWTManager interface {
 	Exists(context.Context, string) (bool, error)
@@ -28,19 +25,16 @@ type JWTManager interface {
 
 type UserHandler struct {
 	UserSrv UserService
-	AuthSrv AuthService
 
 	tokenManager JWTManager
 	logger       *slog.Logger
 }
 
 func NewUserHandler(userSrv UserService,
-	authSrv AuthService,
 	tokenManager JWTManager,
 	logger *slog.Logger) *UserHandler {
 	return &UserHandler{
 		UserSrv:      userSrv,
-		AuthSrv:      authSrv,
 		tokenManager: tokenManager,
 		logger:       logger,
 	}

@@ -107,7 +107,7 @@ func main() {
 		MaxAge:           300,
 	}))
 
-	userHandler := UserHandler.NewUserHandler(userService, authService, NewJWTFacade, logger)
+	userHandler := UserHandler.NewUserHandler(userService, NewJWTFacade, logger)
 	authHandler := AuthHandler.NewAuthHandler(authService, NewJWTFacade, logger)
 	chatHandler := ChatHandler.NewChatHandler(messageService, chatService, logger, NewJWTFacade)
 	messageHandler := MessageHandler.NewMessageHandler(messageService, chatService, logger, wsManager, NewJWTFacade)

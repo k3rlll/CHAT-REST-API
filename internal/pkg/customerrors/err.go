@@ -19,4 +19,6 @@ var (
 	ErrInvalidInput          = errors.New("invalid input")
 	ErrDatabase              = errors.New("database error")
 	ErrNotFound              = errors.New("not found")
+	ErrRefreshTokenNotFound  = errors.New("refresh token not found")
+	ErrRefreshTokenExpired   = errors.New("refresh token expired")
 )

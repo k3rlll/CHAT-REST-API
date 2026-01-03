@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+// TODO: recover tests after fixing the issues
 func TestLoginUsers(t *testing.T) {
 	password := "securepassword"
 	accessToken := "right_access"
@@ -46,13 +47,13 @@ func TestLoginUsers(t *testing.T) {
 			Behavior: func(repo *MockAuthRepository, token *MockToken) {
 				gomock.InOrder(
 					repo.EXPECT().
-						GetPasswordHash(gomock.Any(), gomock.Any(), int64(1), password).Return(entity.User{ID: 1, Password: string(hashedPassword)}, nil),
+						GetPasswordHash(gomock.Any(), gomock.Any(), password).Return(entity.User{ID: 1, Password: string(hashedPassword)}, nil),
 					token.EXPECT().
 						NewAccessToken(int64(1), gomock.Any()).Return(accessToken, nil),
 					token.EXPECT().
 						NewRefreshToken().Return(refreshToken, nil),
 					repo.EXPECT().
-						SaveRefreshToken(gomock.Any(), int64(1), refreshToken).Return(nil),
+						SaveRefreshToken(gomock.Any(), refreshToken).Return(nil),
 				)
 			},
 			wantUser:           entity.User{ID: 1, Username: "testuser"},
@@ -72,7 +73,7 @@ func TestLoginUsers(t *testing.T) {
 			Behavior: func(repo *MockAuthRepository, token *MockToken) {
 				gomock.InOrder(
 					repo.EXPECT().
-						GetPasswordHash(gomock.Any(), gomock.Any(), int64(1), "wrongpassword").Return(entity.User{ID: 1, Password: string(hashedPassword)}, nil),
+						GetPasswordHash(gomock.Any(), int64(1), "wrongpassword").Return(entity.User{ID: 1, Password: string(hashedPassword)}, nil),
 				)
 			},
 			wantUser:           entity.User{},
@@ -93,7 +94,7 @@ func TestLoginUsers(t *testing.T) {
 			Behavior: func(repo *MockAuthRepository, token *MockToken) {
 				gomock.InOrder(
 					repo.EXPECT().
-						GetPasswordHash(gomock.Any(), gomock.Any(), int64(1), password).Return(entity.User{}, customerrors.ErrDatabase),
+						GetPasswordHash(gomock.Any(), int64(1), password).Return(entity.User{}, customerrors.ErrDatabase),
 				)
 			},
 			wantUser:           entity.User{},
@@ -114,7 +115,7 @@ func TestLoginUsers(t *testing.T) {
 			Behavior: func(repo *MockAuthRepository, token *MockToken) {
 				gomock.InOrder(
 					repo.EXPECT().
-						GetPasswordHash(gomock.Any(), gomock.Any(), int64(1), password).Return(entity.User{ID: 1, Password: string(hashedPassword)}, nil),
+						GetPasswordHash(gomock.Any(), int64(1), password).Return(entity.User{ID: 1, Password: string(hashedPassword)}, nil),
 					token.EXPECT().
 						NewAccessToken(int64(1), gomock.Any()).Return("", customerrors.ErrTokenCreationFailed),
 				)
@@ -150,7 +151,7 @@ func TestLoginUsers(t *testing.T) {
 			if gotAccessToken != tt.expectAccessToken {
 				t.Errorf("LoginUser() gotAccessToken = %v, expectAccessToken %v", gotAccessToken, tt.expectAccessToken)
 			}
-			if gotRefreshToken != tt.expectRefreshToken {
+			if gotRefreshToken.Token != tt.expectRefreshToken {
 				t.Errorf("LoginUser() gotRefreshToken = %v, expectRefreshToken %v", gotRefreshToken, tt.expectRefreshToken)
 			}
 		})

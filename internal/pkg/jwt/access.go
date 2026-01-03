@@ -6,16 +6,14 @@ import (
 	"fmt"
 
 	"main/internal/pkg/customerrors"
-	
+
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-
-
 type Claims struct {
-	mysecretkey string
+	mysecretkey string `env:"MYSECRETKEY"`
 }
 
 func NewClaims(mysecretkey string) (*Claims, error) {
@@ -40,11 +38,13 @@ func (c *Claims) NewAccessToken(userID int64, TTL time.Duration) (string, error)
 }
 
 func (c *Claims) NewRefreshToken() (string, error) {
+
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+
 }
 
 func (c *Claims) Parse(accessToken string) (int64, error) {

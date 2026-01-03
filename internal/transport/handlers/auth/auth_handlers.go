@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
 	mwMiddleware "main/internal/server/middleware"
 	"net/http"
@@ -22,7 +23,7 @@ type AuthHandler struct {
 
 //go:generate go run github.com/vektra/mockery/v2@v2.32.4 --name=AuthService
 type AuthService interface {
-	LoginUser(ctx context.Context, userID int64, password string) (accessToken string, refreshToken string, err error)
+	LoginUser(ctx context.Context, userID int64, password string) (accessToken string, refreshToken dom.RefreshToken, err error)
 	LogoutUser(ctx context.Context, userID int64, refreshToken string) error
 }
 
@@ -79,8 +80,8 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
-		Expires:  time.Now().Add(time.Hour * 24 * 7),
-		Value:    RefreshToken,
+		Expires:  time.Now().Add(time.Hour * 24 * 15),
+		Value:    RefreshToken.Token,
 		HttpOnly: true,
 		Path:     "/auth",
 		Secure:   true,

@@ -21,10 +21,17 @@ type Message struct {
 	SenderUsername string    `json:"sender_username"`
 }
 
-
 type User struct {
 	ID       int64  `json:"id"`
 	Username string `json:"username"`
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+type RefreshToken struct {
+	ID        int64     `json:"id"`
+	UserID    int64     `json:"user_id"`
+	Token     string    `json:"refresh_token"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
 }

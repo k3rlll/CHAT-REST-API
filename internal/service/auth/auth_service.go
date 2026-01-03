@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	rdb "main/internal/database/redis"
 	dom "main/internal/domain/entity"
@@ -10,6 +11,10 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+)
+
+var (
+	ErrAlreadyLoggedIn = errors.New("user already logged in")
 )
 
 type JWTFacade struct {
@@ -25,8 +30,9 @@ type AuthService struct {
 
 //go:generate mockgen -source=auth_service.go -destination=./mock/auth_mocks.go -package=mock
 type AuthRepository interface {
-	GetPasswordHash(ctx context.Context, refreshToken string, userID int64, password string) (dom.User, error)
-	SaveRefreshToken(ctx context.Context, userID int64, refreshToken string) error
+	GetPasswordHash(ctx context.Context, userID int64, password string) (dom.User, error)
+	SaveRefreshToken(ctx context.Context, refreshToken dom.RefreshToken) error
+	GetRefreshToken(ctx context.Context, userID int64) (string, error)
 	DeleteRefreshToken(ctx context.Context, userID int64) error
 }
 
@@ -37,6 +43,7 @@ type SetInterface interface {
 type Token interface {
 	NewAccessToken(userID int64, ttl time.Duration) (string, error)
 	NewRefreshToken() (string, error)
+	Parse(accessToken string) (int64, error)
 }
 
 func NewTokenService() Token {
@@ -58,38 +65,44 @@ func NewJWTFacade(parser *jwt.Claims, redisRepo *rdb.Cache) *JWTFacade {
 	}
 }
 
-func (s *AuthService) LoginUser(ctx context.Context,
-	userID int64,
-	password string) (
-	AccessToken string,
-	RefreshToken string,
-	err error) {
+func (s *AuthService) LoginUser(ctx context.Context, userID int64, password string) (string, dom.RefreshToken, error) {
 
-	user, err := s.Repo.GetPasswordHash(ctx, RefreshToken, userID, password)
+	user, err := s.Repo.GetPasswordHash(ctx, userID, password)
 	if err != nil {
-		return "", "", customerrors.ErrDatabase
+		return "", dom.RefreshToken{}, customerrors.ErrDatabase
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		return "", "", customerrors.ErrInvalidInput
+		return "", dom.RefreshToken{}, customerrors.ErrInvalidInput
 	}
-
-	AccessToken, err = s.jwt.NewAccessToken(userID, time.Minute*15)
+	storedRefreshToken, err := s.Repo.GetRefreshToken(ctx, userID)
 	if err != nil {
-		return "", "", err
+		return "", dom.RefreshToken{}, fmt.Errorf("failed to get refresh token: %w", err)
 	}
 
-	RefreshToken, err = s.jwt.NewRefreshToken()
+	accessToken, err := s.jwt.NewAccessToken(userID, time.Minute*15)
 	if err != nil {
-		return "", "", err
+		return "", dom.RefreshToken{}, err
+	}
+	if storedRefreshToken != "" {
+		storedRefreshToken, err = s.jwt.NewRefreshToken()
+		if err != nil {
+			return "", dom.RefreshToken{}, err
+		}
+	}
+	res := dom.RefreshToken{
+		UserID:    userID,
+		Token:     storedRefreshToken,
+		CreatedAt: time.Now(),
+		ExpiresAt: time.Now().Add((24 * time.Hour) * 15),
 	}
 
-	err = s.Repo.SaveRefreshToken(ctx, userID, RefreshToken)
+	err = s.Repo.SaveRefreshToken(ctx, res)
 	if err != nil {
-		return "", "", err
+		return "", dom.RefreshToken{}, err
 	}
 
-	return AccessToken, RefreshToken, nil
+	return accessToken, res, nil
 }
 
 func (s *AuthService) LogoutUser(ctx context.Context, userID int64, accessToken string) error {
