@@ -19,9 +19,9 @@ func setupTestDB(t *testing.T) (*pgxpool.Pool, func()) {
 		postgres.WithUsername("testuser"),
 		postgres.WithPassword("password"),
 		testcontainers.WithWaitStrategy(
-			wait.ForLog("database system is ready").
+			wait.ForLog("database system is ready to accept connections").
 				WithOccurrence(2).
-				WithStartupTimeout(5*time.Second),
+				WithStartupTimeout(10*time.Second),
 		))
 	if err != nil {
 		t.Fatalf("failed to start postgres container: %v", err)
