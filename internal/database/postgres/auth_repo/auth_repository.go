@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	
 )
 
 type AuthRepository struct {
@@ -32,7 +31,7 @@ func (t *AuthRepository) SaveRefreshToken(ctx context.Context, refreshToken dom.
 		refreshToken.UserID, refreshToken.Token, refreshToken.CreatedAt, refreshToken.ExpiresAt)
 
 	if err != nil {
-		return err
+		return customerrors.ErrDatabase
 	}
 	return nil
 }
@@ -65,9 +64,13 @@ func (t *AuthRepository) GetByEmail(ctx context.Context, email string) (dom.User
 	err := t.pool.QueryRow(ctx,
 		"SELECT id, username, password_hash FROM users WHERE email=$1", email).
 		Scan(&user.ID, &user.Username, &user.Password)
-	if err != nil {
-		return dom.User{}, err
+	if user.ID == 0 {
+		return dom.User{}, customerrors.ErrUserNotFound
 	}
+	if err != nil {
+		return dom.User{}, customerrors.ErrDatabase
+	}
+
 	return user, nil
 }
 
