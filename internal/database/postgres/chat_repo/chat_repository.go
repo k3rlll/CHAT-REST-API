@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	dom "main/internal/domain/entity"
+	"main/internal/pkg/customerrors"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -30,7 +31,7 @@ func (c *ChatRepository) CreateChat(ctx context.Context,
 
 	tx, err := c.pool.Begin(ctx)
 	if err != nil {
-		return 0, fmt.Errorf("failed to begin transaction: %w", err)
+		return 0, fmt.Errorf("failed to begin transaction: %w", customerrors.ErrDatabase)
 	}
 	defer tx.Rollback(ctx)
 	if title == "" {
@@ -39,7 +40,7 @@ func (c *ChatRepository) CreateChat(ctx context.Context,
 			err := tx.QueryRow(ctx,
 				"SELECT username FROM users WHERE id=$1", userID).Scan(&username)
 			if err != nil {
-				return 0, fmt.Errorf("chat repository: failed to select username: %w", err)
+				return 0, fmt.Errorf("chat repository: failed to select username: %w", customerrors.ErrDatabase)
 			}
 			title += username + ", "
 		}
@@ -48,19 +49,19 @@ func (c *ChatRepository) CreateChat(ctx context.Context,
 	err = tx.QueryRow(ctx,
 		"INSERT INTO chats (title, is_private) VALUES ($1, $2) RETURNING id", title, isPrivate).Scan(&chatId)
 	if err != nil {
-		return 0, fmt.Errorf("failed to insert chat: %w", err)
+		return 0, fmt.Errorf("failed to insert chat: %w", customerrors.ErrDatabase)
 	}
 
 	for _, userID := range membersID {
 		_, err := tx.Exec(ctx,
 			"INSERT INTO chat_members (chat_id, user_id) VALUES ($1, $2)", chatId, userID)
 		if err != nil {
-			return 0, fmt.Errorf("failed to insert chat member: %w", err)
+			return 0, fmt.Errorf("failed to insert chat member: %w", customerrors.ErrDatabase)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+		return 0, fmt.Errorf("failed to commit transaction: %w", customerrors.ErrDatabase)
 	}
 
 	return chatId, nil
