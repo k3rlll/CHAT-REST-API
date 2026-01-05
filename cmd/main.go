@@ -80,9 +80,9 @@ func main() {
 	NewCache := rdb.NewCache(redis)
 
 	authRepo := auth.NewAuthRepository(dbConn, logger)
-	userRepo := user.NewUserRepository(dbConn, logger)
+	userRepo := user.NewUserRepository(dbConn)
 	chatRepo := chat.NewChatRepository(dbConn, logger)
-	msgRepo := msg.NewMessageRepository(dbConn, logger)
+	msgRepo := msg.NewMessageRepository(dbConn)
 	jwtService := srvAuth.NewTokenService()
 	NewJWTFacade := srvAuth.NewJWTFacade(NewClaims, NewCache)
 

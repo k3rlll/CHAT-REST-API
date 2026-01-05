@@ -2,7 +2,6 @@ package user_repo
 
 import (
 	"context"
-	"log/slog"
 	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
 
@@ -10,14 +9,12 @@ import (
 )
 
 type UserRepository struct {
-	pool   *pgxpool.Pool
-	logger *slog.Logger
+	pool *pgxpool.Pool
 }
 
-func NewUserRepository(pool *pgxpool.Pool, logger *slog.Logger) *UserRepository {
+func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 	return &UserRepository{
-		pool:   pool,
-		logger: logger,
+		pool: pool,
 	}
 }
 
