@@ -7,6 +7,7 @@ import (
 	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -42,7 +43,12 @@ func (c *ChatRepository) CreateChat(ctx context.Context,
 			if err != nil {
 				return 0, fmt.Errorf("chat repository: failed to select username: %w", customerrors.ErrDatabase)
 			}
-			title += username + ", "
+			if userID != membersID[len(membersID)-1] {
+				title += username + ", "
+			} else {
+				title += username
+			}
+			title += username
 		}
 
 	}
@@ -52,12 +58,9 @@ func (c *ChatRepository) CreateChat(ctx context.Context,
 		return 0, fmt.Errorf("failed to insert chat: %w", customerrors.ErrDatabase)
 	}
 
-	for _, userID := range membersID {
-		_, err := tx.Exec(ctx,
-			"INSERT INTO chat_members (chat_id, user_id) VALUES ($1, $2)", chatId, userID)
-		if err != nil {
-			return 0, fmt.Errorf("failed to insert chat member: %w", customerrors.ErrDatabase)
-		}
+	err = c.addMembersTX(ctx, tx, chatId, membersID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to add members to chat: %w", customerrors.ErrDatabase)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -65,6 +68,17 @@ func (c *ChatRepository) CreateChat(ctx context.Context,
 	}
 
 	return chatId, nil
+
+}
+func (c *ChatRepository) addMembersTX(ctx context.Context, tx pgx.Tx, chatID int64, members []int64) error {
+	for _, userID := range members {
+		_, err := tx.Exec(ctx,
+			"INSERT INTO chat_members (chat_id, user_id) VALUES ($1, $2)", chatID, userID)
+		if err != nil {
+			return fmt.Errorf("repository: failed to insert chat member: %w", err)
+		}
+	}
+	return nil
 
 }
 

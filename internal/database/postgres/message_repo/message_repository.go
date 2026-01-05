@@ -3,21 +3,19 @@ package message_repo
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	dom "main/internal/domain/entity"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type MessageRepository struct {
-	pool   *pgxpool.Pool
-	logger *slog.Logger
+	pool *pgxpool.Pool
 }
 
-func NewMessageRepository(pool *pgxpool.Pool, logger *slog.Logger) *MessageRepository {
+func NewMessageRepository(pool *pgxpool.Pool) *MessageRepository {
 	return &MessageRepository{
-		pool:   pool,
-		logger: logger,
+		pool: pool,
 	}
 }
 
@@ -46,23 +44,24 @@ func (m *MessageRepository) Create(
 	chatID int64, userID int64,
 	senderUsername string, text string) (dom.Message, error) {
 	var messageID int64
-	query := "INSERT INTO messages (chat_id, sender_id, sender_username, text) VALUES ($1,$2,$3,$4) RETURNING id"
+	var createdAt time.Time
+	query := "INSERT INTO messages (chat_id, sender_id, sender_username, text) VALUES ($1,$2,$3,$4) RETURNING id, created_at"
 
 	err := m.pool.QueryRow(ctx,
-		query, chatID, userID, senderUsername, text).Scan(&messageID)
+		query, chatID, userID, senderUsername, text).Scan(&messageID, &createdAt)
 	if err != nil {
 
 		return dom.Message{}, fmt.Errorf("repository:failed to create message: %w", err)
 	}
 
 	var res = dom.Message{
+		Id:             messageID,
 		Text:           text,
 		ChatID:         chatID,
 		SenderID:       userID,
 		SenderUsername: senderUsername,
+		CreatedAt:      createdAt,
 	}
-	err = m.pool.QueryRow(ctx, query, chatID, userID, senderUsername, text).
-		Scan(&res.Id, &res.CreatedAt)
 
 	return res, nil
 }

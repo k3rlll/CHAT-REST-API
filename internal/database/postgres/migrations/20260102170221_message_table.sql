@@ -7,6 +7,7 @@ CREATE TABLE messages(
     created_at TIMESTAMPTZ DEFAULT NOW(),
     chat_id BIGINT NOT NULL,
     sender_id BIGINT NOT NULL,
+    sender_username VARCHAR(255) NOT NULL,
     FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE,
     FOREIGN KEY (sender_id) REFERENCES users(id) ON DELETE CASCADE
 );

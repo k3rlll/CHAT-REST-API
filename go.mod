@@ -16,6 +16,7 @@ require (
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.40.0
 	go.uber.org/mock v0.6.0
 	golang.org/x/crypto v0.44.0
+	golang.org/x/tools/go/expect v0.1.1-deprecated
 )
 
 require (
@@ -78,6 +79,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.38.0 // indirect
 	go.opentelemetry.io/otel/trace v1.38.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
+	golang.org/x/mod v0.30.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
