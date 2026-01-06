@@ -9,6 +9,53 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
+type Server struct {
+	Port        int           `yaml:"port" env:"SERVER_PORT" env-default:"8082"`
+	Mode        string        `yaml:"mode" env:"SERVER_MODE" env-default:"debug"`
+	Host        string        `yaml:"host" env:"SERVER_HOST" env-default:"localhost"`
+	Timeout     time.Duration `yaml:"timeout" env:"SERVER_TIMEOUT" env-default:"15"`
+	IdleTimeout time.Duration `yaml:"idle_timeout" env:"SERVER_IDLE_TIMEOUT" env-default:"60"`
+}
+
+type Postgres struct {
+	Host     string `yaml:"host" env:"DB_HOST" env-default:"localhost"`
+	Port     int    `yaml:"port" env:"DB_PORT" env-default:"5432"`
+	User     string `yaml:"user" env:"DB_USER" env-default:"postgres"`
+	Password string `yaml:"password" env:"DB_PASSWORD"`
+	DBName   string `yaml:"dbname" env:"DB_NAME" env-default:"postgres"`
+}
+
+type Kafka struct {
+	Brokers       []string `yaml:"brokers" env:"KAFKA_BROKERS" env-default:"localhost:9092"`
+	Topic         string   `yaml:"topic" env:"KAFKA_TOPIC" env-default:"chat_messages"`
+	ConsumerGroup string   `yaml:"consumer_group" env:"KAFKA_CONSUMER_GROUP" env-default:"chat_service_group"`
+}
+
+type MongoDB struct {
+	URI      string `yaml:"uri" env:"MONGO_URI" env-default:"mongodb://localhost:27017"`
+	Database string `yaml:"database" env:"MONGO_DATABASE" env-default:"chatdb"`
+	Ports    int    `yaml:"ports" env:"MONGO_PORTS" env-default:"27017"`
+}
+
+type Redis struct {
+	Host         string        `yaml:"host" env:"REDIS_HOST" env-default:"localhost"`
+	Port         int           `yaml:"port" env:"REDIS_PORT" env-default:"6379"`
+	Password     string        `yaml:"password" env:"REDIS_PASSWORD"`
+	DB           int           `yaml:"db" env:"REDIS_DB" env-default:"0"`
+	DialTimeout  time.Duration `yaml:"dial_timeout" env:"REDIS_DIAL_TIMEOUT" env-default:"5s"`
+	ReadTimeout  time.Duration `yaml:"read_timeout" env:"REDIS_READ_TIMEOUT" env-default:"3s"`
+	WriteTimeout time.Duration `yaml:"write_timeout" env:"REDIS_WRITE_TIMEOUT" env-default:"3s"`
+	PoolSize     int           `yaml:"pool_size" env:"REDIS_POOL_SIZE" env-default:"10"`
+	MinIdleConns int           `yaml:"min_idle_conns" env:"REDIS_MIN_IDLE_CONNS" env-default:"2"`
+}
+
+type Config struct {
+	Env      string   `yaml:"env" env:"ENV" env-default:"development"`
+	Server   Server   `yaml:"server"`
+	Database Postgres `yaml:"database"`
+	Redis    Redis    `yaml:"redis"`
+}
+
 type EnvConfig struct {
 	ConfigPath string `env:"CONFIG_PATH"`
 	secretKey  string `env:"MY_SECRET_KEY"`
@@ -25,30 +72,6 @@ func MySecretKey() string {
 		panic("cannot read env variables: " + err.Error())
 	}
 	return envConfig.MySecretKey()
-}
-
-type HTTPServer struct {
-	Port        int           `yaml:"port" env:"SERVER_PORT" env-default:"8082"`
-	Mode        string        `yaml:"mode" env:"SERVER_MODE" env-default:"debug"`
-	Host        string        `yaml:"host" env:"SERVER_HOST" env-default:"localhost"`
-	Timeout     time.Duration `yaml:"timeout" env:"SERVER_TIMEOUT" env-default:"15"`
-	IdleTimeout time.Duration `yaml:"idle_timeout" env:"SERVER_IDLE_TIMEOUT" env-default:"60"`
-}
-
-type Config struct {
-	Env      string     `yaml:"env" env:"ENV" env-default:"development"`
-	Server   HTTPServer `yaml:"server"`
-	Database struct {
-		Type     string `yaml:"type"`
-		Host     string `yaml:"host" env:"DB_HOST" env-default:"localhost"`
-		Port     int    `yaml:"port" env:"DB_PORT" env-default:"5432"`
-		User     string `yaml:"user" env:"DB_USER" env-default:"postgres"`
-		Password string `yaml:"password" env:"DB_PASSWORD"`
-	} `yaml:"database"`
-	Redis struct {
-		Addr     string `yaml:"addr" env:"REDIS_ADDR" env-default:"localhost:6379"`
-		Password string `yaml:"password" env:"REDIS_PASSWORD"`
-	} `yaml:"redis"`
 }
 
 func (c *Config) DatabaseDSN() string {

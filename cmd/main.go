@@ -70,7 +70,7 @@ func main() {
 		logger.Error("failed to ping database", slog.String("error", err.Error()))
 		return
 	}
-	redis, err := rdb.NewRedisClient(context.Background(), cfg.Redis.Addr, cfg.Redis.Password)
+	redis, err := rdb.NewRedisClient(context.Background(), cfg.Redis)
 	if err != nil {
 		logger.Error("failed to connect to redis", slog.String("error", err.Error()))
 		return

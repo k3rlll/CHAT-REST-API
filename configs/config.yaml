@@ -1,4 +1,4 @@
-env: "development"  # или "production", "staging"
+env: "development" 
 CONFIG_PATH: "configs/config.yaml"
 server:
   port: 8082
@@ -7,7 +7,19 @@ server:
   idle_timeout: 30s
 
 
-database:
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+  pool_size: 10
+  min_idle_conns: 2
+
+
+postgres:
   type: "postgres"
   host: "localhost"
   port: 5432
@@ -15,8 +27,38 @@ database:
   user: "postgres"
   password: "252566"
 
+
+mongo:
+  uri: "mongodb://localhost:27017"
+  ports: 27017 - 27017
+  database: "chat_history"
+
+ZOOKEEPER:
+  image: confluentinc/cp-zookeeper:7.3.0
+  environment:
+    ZOOKEEPER_CLIENT_PORT: 2181
+    ZOOKEEPER_TICK_TIME: 2000
+    ZOOKEEPER_SYNC_LIMIT: 2
+
+kafka:
+  consumer_group: "chat_service_group"
+  broker: "localhost:9092"
+  topic: "chat_messages"
+  image: confluentinc/cp-kafka:7.3.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+
 logging:
   level: info
-  format: json  # или "text"
+  format: json  
   output: stdout
 
