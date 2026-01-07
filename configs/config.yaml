@@ -28,7 +28,7 @@ postgres:
   password: "252566"
 
 
-mongo:
+mongodb:
   uri: "mongodb://localhost:27017"
   ports: 27017 - 27017
   database: "chat_history"

@@ -52,7 +52,8 @@ type Redis struct {
 type Config struct {
 	Env      string   `yaml:"env" env:"ENV" env-default:"development"`
 	Server   Server   `yaml:"server"`
-	Database Postgres `yaml:"database"`
+	Postgres Postgres `yaml:"postgres"`
+	MongoDB  MongoDB  `yaml:"mongodb"`
 	Redis    Redis    `yaml:"redis"`
 }
 
@@ -76,10 +77,14 @@ func MySecretKey() string {
 
 func (c *Config) DatabaseDSN() string {
 	return "postgres://" +
-		c.Database.User + ":" +
-		c.Database.Password + "@" +
-		c.Database.Host + ":" +
-		strconv.Itoa(c.Database.Port) + "/postgres?sslmode=disable"
+		c.Postgres.User + ":" +
+		c.Postgres.Password + "@" +
+		c.Postgres.Host + ":" +
+		strconv.Itoa(c.Postgres.Port) + "/postgres?sslmode=disable"
+}
+
+func (c *Config) MongoURI() string {
+	return c.MongoDB.URI
 }
 
 func MustLoadConfig() *Config {

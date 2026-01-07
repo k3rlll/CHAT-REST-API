@@ -145,12 +145,13 @@ func (c *ChatService) OpenChat(ctx context.Context,
 
 	details.MembersCount = len(details.MembersID)
 
-	messages, err := c.Chat.OpenChat(ctx, chatID, userID)
-	if err != nil {
-		return dom.Chat{}, nil, err
-	}
+	
+	// messages, err := c.Chat.OpenChat(ctx, chatID, userID)
+	// if err != nil {
+	// 	return dom.Chat{}, nil, err
+	// }
 
-	return details, messages, nil
+	// return details, messages, nil
 }
 
 func (c *ChatService) AddMembers(ctx context.Context, chatID int64, userID int64, members []int64) error {

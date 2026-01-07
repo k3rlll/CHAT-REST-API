@@ -2,9 +2,12 @@ package message
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	dom "main/internal/domain/entity"
+	"main/internal/domain/events"
 	"main/internal/pkg/customerrors"
+	"time"
 )
 
 type ChatInterface interface {
@@ -20,35 +23,65 @@ type MessageInterface interface {
 	ListByChat(ctx context.Context, chatID int64, limit, lastMessage int) ([]dom.Message, error)
 }
 
+type MongoRepository interface {
+	Save(ctx context.Context, msg interface{}) (string, error)
+}
+
+type KafkaProducer interface {
+	SendMessageCreated(ctx context.Context, event events.EventMessageCreated) error
+}
+
 type MessageService struct {
 	Chat    ChatInterface
 	Message MessageInterface
+	Mongo   MongoRepository
+	Kafka   KafkaProducer
 	Logger  *slog.Logger
 }
 
-func NewMessageService(chat ChatInterface, message MessageInterface, logger *slog.Logger) *MessageService {
+func NewMessageService(chat ChatInterface, message MessageInterface, mongo MongoRepository, kafka KafkaProducer, logger *slog.Logger) *MessageService {
 	return &MessageService{
 		Chat:    chat,
 		Message: message,
+		Mongo:   mongo,
+		Kafka:   kafka,
 		Logger:  logger,
 	}
 }
 
-func (m *MessageService) SendMessage(ctx context.Context, chatID int64, userID int64, senderUsername string, text string) (dom.Message, error) {
+func (m *MessageService) SendMessage(ctx context.Context, chatID int64, userID int64, senderUsername string, text string) error {
 	isMember, err := m.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
 	if err != nil {
-		return dom.Message{}, customerrors.ErrDatabase
+		return customerrors.ErrDatabase
 	}
 	if !isMember {
-		return dom.Message{}, customerrors.ErrUserNotMemberOfChat
+		return customerrors.ErrUserNotMemberOfChat
 	}
 
-	message, err := m.Message.Create(ctx, chatID, userID, senderUsername, text)
+	msg := dom.Message{
+		ChatID:         chatID,
+		SenderID:       userID,
+		SenderUsername: senderUsername,
+		Text:           text,
+		CreatedAt:      time.Now(),
+	}
+
+	mongoID, err := m.Mongo.Save(ctx, msg)
 	if err != nil {
-		return dom.Message{}, customerrors.ErrDatabase
+		return customerrors.ErrDatabase
 	}
 
-	return message, nil
+	event := events.EventMessageCreated{
+		MessageID: mongoID,
+		ChatID:    chatID,
+		SenderID:  userID,
+		CreatedAt: msg.CreatedAt,
+	}
+
+	if err := m.Kafka.SendMessageCreated(ctx, event); err != nil {
+		fmt.Errorf("failed to publish event: %w", err)
+	}
+	return nil
 }
 
 func (m *MessageService) DeleteMessage(ctx context.Context, messageID int64) error {
@@ -88,7 +121,6 @@ func (m *MessageService) EditMessage(ctx context.Context, messageID int64, newTe
 }
 
 func (m *MessageService) ListMessages(ctx context.Context, chatID int64, limit, lastMessage int) ([]dom.Message, error) {
-	
-	
+
 	return m.Message.ListByChat(ctx, chatID, limit, lastMessage)
 }
