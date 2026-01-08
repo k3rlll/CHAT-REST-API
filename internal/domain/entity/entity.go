@@ -1,6 +1,10 @@
 package entity
 
-import "time"
+import (
+	"time"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
+)
 
 type Chat struct {
 	Id               int64     `json:"chat_id" `
@@ -13,12 +17,12 @@ type Chat struct {
 }
 
 type Message struct {
-	Id             int64     `json:"message_id"`
-	Text           string    `json:"text"`
-	CreatedAt      time.Time `json:"created_at"`
-	ChatID         int64     `json:"chat_id"`
-	SenderID       int64     `json:"sender_id"`
-	SenderUsername string    `json:"sender_username"`
+	Id             primitive.ObjectID `json:"message_id" bson:"_id,omitempty"`
+	Text           string             `json:"text" bson:"text"`
+	CreatedAt      time.Time          `json:"created_at" bson:"created_at"`
+	ChatID         int64              `json:"chat_id" bson:"chat_id"`
+	SenderID       int64              `json:"sender_id" bson:"sender_id"`
+	SenderUsername string             `json:"sender_username" bson:"sender_username"`
 }
 
 type User struct {

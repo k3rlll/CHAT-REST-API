@@ -75,7 +75,7 @@ func (m *MessageRepository) EditMessage(ctx context.Context, messageID int64, ne
 	return nil
 }
 
-func (m *MessageRepository) ListByChat(ctx context.Context, chatID int64, limit, lastMessage int) ([]dom.Message, error) {
+func (m *MessageRepository) ListByChat(ctx context.Context, chatID int64, limit, lastMessage int64) ([]dom.Message, error) {
 
 	query := `
 		SELECT id, chat_id, sender_id, sender_username, text, created_at
