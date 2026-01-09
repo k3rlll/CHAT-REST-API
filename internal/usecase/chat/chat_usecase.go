@@ -6,15 +6,17 @@ import (
 	"log/slog"
 	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
+	"time"
 )
 
 type ChatService struct {
 	User   UserInterface
 	Chat   ChatRepositoryInterface
+	Msg    MessageRepositoryInterface
 	Logger *slog.Logger
 }
 
-//go:generate mockgen -source=chat_service.go -destination=mock/chat_mocks.go -package=mock
+//go:generate mockgen -source=chat_usecase.go -destination=mock/chat_mocks.go -package=mock
 type ChatRepositoryInterface interface {
 	GetChatDetails(ctx context.Context, chatID int64) (dom.Chat, error)
 	ListOfChats(ctx context.Context, userID int64) ([]dom.Chat, error)
@@ -22,9 +24,13 @@ type ChatRepositoryInterface interface {
 	DeleteChat(ctx context.Context, chatID int64) error
 	CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (int64, error)
 	CheckIsMemberOfChat(ctx context.Context, chatID int64, userID int64) (bool, error)
-	OpenChat(ctx context.Context, chatID int64, userID int64) ([]dom.Message, error)
+	// OpenChat(ctx context.Context, chatID int64, userID int64) ([]dom.Message, error)
 	AddMembers(ctx context.Context, chatID int64, members []int64) error
 	RemoveMember(ctx context.Context, chatID int64, userID int64) error
+}
+
+type MessageRepositoryInterface interface {
+	GetMessages(ctx context.Context, chatID int64, anchorTime time.Time, anchorID string, limit int64) ([]dom.Message, error)
 }
 
 type UserInterface interface {
@@ -62,7 +68,7 @@ func (c *ChatService) CreateChat(
 	}
 
 	chat := dom.Chat{
-		Id:        chat_id,
+		ID:        chat_id,
 		Title:     title,
 		IsPrivate: isPrivate,
 	}
@@ -90,6 +96,9 @@ func (c *ChatService) DeleteChat(ctx context.Context, chatID int64) error {
 }
 
 func (c *ChatService) ListOfChats(ctx context.Context, userID int64) ([]dom.Chat, error) {
+	if userID <= 0 {
+		return nil, fmt.Errorf("chat service: invalid userID: %w", customerrors.ErrInvalidInput)
+	}
 
 	return c.Chat.ListOfChats(ctx, userID)
 
@@ -100,23 +109,28 @@ func (c *ChatService) GetChatDetails(ctx context.Context, chatID int64, userID i
 
 	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
 	if err != nil {
-		return dom.Chat{}, customerrors.ErrFailedToCheck
+		return dom.Chat{}, fmt.Errorf("chat service: failed to check if user is member of chat: %w", customerrors.ErrFailedToCheck)
 	}
 	if !isMember {
-		return dom.Chat{}, customerrors.ErrUserNotMemberOfChat
+		return dom.Chat{}, fmt.Errorf("chat service: user is not a member of chat: %w", customerrors.ErrUserNotMemberOfChat)
 	}
 	chat, err := c.Chat.GetChatDetails(ctx, chatID)
 	if err != nil {
-		return dom.Chat{}, err
+		return dom.Chat{}, fmt.Errorf("chat service: failed to get chat details: %w", err)
 	}
 	return chat, nil
 }
 
 func (c *ChatService) OpenChat(ctx context.Context,
 	chatID int64,
-	userID int64) (dom.Chat,
+	userID int64,
+	anchorTime time.Time, anchorID string, limit int64) (dom.Chat,
 	[]dom.Message,
 	error) {
+
+	if chatID <= 0 {
+		return dom.Chat{}, nil, fmt.Errorf("chat service: invalid chatID: %w", customerrors.ErrInvalidInput)
+	}
 
 	exists, err := c.Chat.CheckIfChatExists(ctx, chatID)
 	if err != nil {
@@ -126,32 +140,27 @@ func (c *ChatService) OpenChat(ctx context.Context,
 		return dom.Chat{}, nil, customerrors.ErrNotFound
 	}
 
-	if chatID <= 0 {
-		return dom.Chat{}, nil, fmt.Errorf("chat service: invalid chatID: %w", customerrors.ErrInvalidInput)
-	}
-
 	isMember, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
 	if err != nil {
-		return dom.Chat{}, nil, customerrors.ErrFailedToCheck
+		return dom.Chat{}, nil, fmt.Errorf("chat service: failed to check if user is member of chat: %w", customerrors.ErrFailedToCheck)
 	}
 	if !isMember {
-		return dom.Chat{}, nil, customerrors.ErrUserNotMemberOfChat
+		return dom.Chat{}, nil, fmt.Errorf("chat service: user is not a member of chat: %w", customerrors.ErrUserNotMemberOfChat)
 	}
 
 	details, err := c.Chat.GetChatDetails(ctx, chatID)
 	if err != nil {
-		return dom.Chat{}, nil, customerrors.ErrDatabase
+		return dom.Chat{}, nil, fmt.Errorf("chat service: failed to get chat details: %w", err)
 	}
 
 	details.MembersCount = len(details.MembersID)
 
-	
-	// messages, err := c.Chat.OpenChat(ctx, chatID, userID)
-	// if err != nil {
-	// 	return dom.Chat{}, nil, err
-	// }
+	messages, err := c.Msg.GetMessages(ctx, chatID, anchorTime, anchorID, limit)
+	if err != nil {
+		return dom.Chat{}, nil, fmt.Errorf("chat service: failed to get messages: %w", err)
+	}
+	return details, messages, nil
 
-	// return details, messages, nil
 }
 
 func (c *ChatService) AddMembers(ctx context.Context, chatID int64, userID int64, members []int64) error {
@@ -160,22 +169,22 @@ func (c *ChatService) AddMembers(ctx context.Context, chatID int64, userID int64
 	}
 	inChat, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
 	if err != nil {
-		return err
+		return fmt.Errorf("chat service: failed to check if user is member of chat: %w", customerrors.ErrFailedToCheck)
 	}
 	if !inChat {
-		return customerrors.ErrUserNotMemberOfChat
+		return fmt.Errorf("chat service: user is not a member of chat: %w", customerrors.ErrUserNotMemberOfChat)
 	}
 
 	for _, memberID := range members {
 		if !c.User.CheckUserExists(ctx, memberID) {
-			return customerrors.ErrUserNotFound
+			return fmt.Errorf("chat service: user not found: %w", customerrors.ErrUserNotFound)
 		}
 		inChat, err := c.Chat.CheckIsMemberOfChat(ctx, chatID, memberID)
 		if err != nil {
-			return err
+			return fmt.Errorf("chat service: failed to check if user is member of chat: %w", customerrors.ErrFailedToCheck)
 		}
 		if inChat {
-			return customerrors.ErrUserAlreadyInChat
+			return fmt.Errorf("chat service: user is already in chat: %w", customerrors.ErrUserAlreadyInChat)
 		}
 	}
 

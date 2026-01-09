@@ -4,6 +4,7 @@ import (
 	"context"
 	"log/slog"
 	config "main/internal/config"
+	"main/internal/infrastructure/kafka"
 	"net"
 	"net/http"
 	"os"
@@ -12,10 +13,10 @@ import (
 	"syscall"
 	"time"
 
+	msg "main/internal/database/mongo"
 	psql "main/internal/database/postgres"
 	auth "main/internal/database/postgres/auth_repo"
 	chat "main/internal/database/postgres/chat_repo"
-	msg "main/internal/database/postgres/message_repo"
 	user "main/internal/database/postgres/user_repo"
 	rdb "main/internal/database/redis"
 	claims "main/internal/pkg/jwt"
@@ -59,17 +60,28 @@ func main() {
 		return
 	}
 
-	dbConn, err := psql.NewDBPool(cfg.DatabaseDSN())
+	postgres, err := psql.NewDBPool(cfg.DatabaseDSN())
 	if err != nil {
 		logger.Error("failed to connect to database", slog.String("error", err.Error()))
 		return
 	}
-	defer dbConn.Close()
+	defer postgres.Close()
 
-	if err := dbConn.Ping(context.Background()); err != nil {
+	if err := postgres.Ping(context.Background()); err != nil {
 		logger.Error("failed to ping database", slog.String("error", err.Error()))
 		return
 	}
+
+	mongoClient, err := msg.NewMongoClient(context.Background(), cfg.MongoURI())
+	if err != nil {
+		logger.Error("failed to connect to mongo", slog.String("error", err.Error()))
+		return
+	}
+	defer func() {
+		if err := mongoClient.Client().Disconnect(context.Background()); err != nil {
+			logger.Error("failed to disconnect mongo client", slog.String("error", err.Error()))
+		}
+	}()
 	redis, err := rdb.NewRedisClient(context.Background(), cfg.Redis)
 	if err != nil {
 		logger.Error("failed to connect to redis", slog.String("error", err.Error()))
@@ -79,17 +91,28 @@ func main() {
 
 	NewCache := rdb.NewCache(redis)
 
-	authRepo := auth.NewAuthRepository(dbConn, logger)
-	userRepo := user.NewUserRepository(dbConn)
-	chatRepo := chat.NewChatRepository(dbConn, logger)
-	msgRepo := msg.NewMessageRepository(dbConn)
+	authRepo := auth.NewAuthRepository(postgres, logger)
+	userRepo := user.NewUserRepository(postgres)
+	chatRepo := chat.NewChatRepository(postgres, logger)
+	msgRepo := msg.NewMessageRepository(mongoClient, logger)
 	jwtService := srvAuth.NewTokenService()
 	NewJWTFacade := srvAuth.NewJWTFacade(NewClaims, NewCache)
+
+	kafkaProducer := kafka.NewProducer(cfg.Kafka.Brokers, cfg.Kafka.Topic)
+	defer kafkaProducer.Close()
+
+	kafkaConsumer := kafka.NewConsumer(cfg.Kafka.Brokers, cfg.Kafka.Topic, cfg.Kafka.ConsumerGroup,
+		chatRepo, logger)
+	go func() {
+		if err := kafkaConsumer.StartConsuming(context.Background()); err != nil {
+			logger.Error("kafka consumer error", slog.String("error", err.Error()))
+		}
+	}()
 
 	userService := srvUser.NewUserService(userRepo, logger)
 	authService := srvAuth.NewAuthService(authRepo, jwtService, NewCache)
 	chatService := srvChat.NewChatService(userRepo, chatRepo, logger)
-	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, logger)
+	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, kafkaProducer, logger)
 
 	wsManager := ws.NewManager(logger)
 	logger.Info("Connected to database successfully")

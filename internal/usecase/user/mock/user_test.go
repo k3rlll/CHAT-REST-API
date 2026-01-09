@@ -1,4 +1,4 @@
-package mock
+package mock_test
 
 import (
 	"errors"
@@ -6,7 +6,8 @@ import (
 	"log/slog"
 	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
-	service "main/internal/service/user"
+	service "main/internal/usecase/user"
+	. "main/internal/usecase/user/mock"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

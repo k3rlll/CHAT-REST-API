@@ -5,7 +5,7 @@ import (
 	"fmt"
 	entity "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
-	"main/internal/service/auth"
+	"main/internal/usecase/auth"
 	"testing"
 
 	gomock "go.uber.org/mock/gomock"

@@ -21,14 +21,14 @@ type EditMessageDTO struct {
 }
 
 type DeleteMessageDTO struct {
-	MessageID int64 `json:"message_id"`
-	ChatID    int64 `json:"chat_id"`
-	UserID    int64 `json:"user_id"`
+	MessageID []string `json:"message_id"`
+	ChatID    int64    `json:"chat_id"`
+	UserID    int64    `json:"user_id"`
 }
 
 type MessageService interface {
 	SendMessage(ctx context.Context, chatID, senderID int64, senderUsername, text string) (dom.Message, error)
-	DeleteMessage(ctx context.Context, messageID int64) error
+	DeleteMessage(ctx context.Context, senderID int64, chatID int64, msgID []string) error
 	EditMessage(ctx context.Context, messageID int64, newText string) error
 	ListMessages(ctx context.Context, chatID int64, limit, lastMessage int) ([]dom.Message, error)
 }
@@ -165,7 +165,7 @@ func (h *MessageHandler) DeleteMessageHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := h.MessSrv.DeleteMessage(r.Context(), request.MessageID); err != nil {
+	if err := h.MessSrv.DeleteMessage(r.Context(), request.UserID, request.ChatID, request.MessageID); err != nil {
 		h.logger.Error("failed to delete message", slog.Any("error", err.Error()))
 		w.WriteHeader(http.StatusInternalServerError)
 		return

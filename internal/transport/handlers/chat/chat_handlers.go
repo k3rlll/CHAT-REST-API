@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	dom "main/internal/domain/entity"
 	"strconv"
+	"time"
 
 	"main/internal/pkg/customerrors"
 	mwMiddleware "main/internal/server/middleware"
@@ -27,15 +28,13 @@ type UserService interface {
 }
 
 type MessageService interface {
-	SendMessage(ctx context.Context, chatID int64, userID int64, senderUsername string, text string) (dom.Message, error)
-	DeleteMessage(ctx context.Context, msgID int64) error
-	ListMessages(ctx context.Context, chatID int64, limit, lastMessage int) ([]dom.Message, error)
+	SendMessage(ctx context.Context, chatID int64, userID int64, senderUsername string, text string) error
+	GetMessages(ctx context.Context, userID, chatID int64, anchorTime time.Time, anchorID string, limit int64) ([]dom.Message, error)
 }
 
 type ChatService interface {
 	CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (dom.Chat, error)
 	ListOfChats(ctx context.Context, userID int64) ([]dom.Chat, error)
-	OpenChat(ctx context.Context, chatID int64, userID int64) (dom.Chat, []dom.Message, error)
 	GetChatDetails(ctx context.Context, chatID int64, userID int64) (dom.Chat, error)
 	DeleteChat(ctx context.Context, chatID int64) error
 	AddMembers(ctx context.Context, chatID, userID int64, members []int64) error
@@ -61,7 +60,7 @@ func NewChatHandler(
 	}
 }
 
-// все пути относительно /chats
+// all ways according to /chats
 func (h *ChatHandler) RegisterRoutes(r chi.Router) {
 	r.Group(func(r chi.Router) {
 		r.Use(mwMiddleware.JWTAuth(h.Manager))
@@ -141,9 +140,34 @@ func (h *ChatHandler) OpenChatHandler(w http.ResponseWriter, r *http.Request) {
 	userID, err := strconv.ParseInt(userIDStr, 10, 64)
 	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
 
-	chat, messages, err := h.ChatSrv.OpenChat(r.Context(), chatID, userID)
+	limitStr := r.URL.Query().Get("limit")
+	limit, err := strconv.ParseInt(limitStr, 10, 64)
 	if err != nil {
-		h.logger.Error("failed to open chat", slog.String("error", err.Error()))
+		limit = 50
+	}
+
+	anchorID := r.URL.Query().Get("before_id")
+	beforeTimeStr := r.URL.Query().Get("before_time")
+	var beforeTime time.Time
+	if beforeTimeStr != "" {
+		beforeTime, err = time.Parse(time.RFC3339, beforeTimeStr)
+		if err != nil {
+			h.logger.Error("failed to parse before_time", slog.String("error", err.Error()))
+			http.Error(w, "Invalid before_time format", http.StatusBadRequest)
+			return
+		}
+	}
+
+	chat, err := h.ChatSrv.GetChatDetails(r.Context(), chatID, userID)
+	if err != nil {
+		h.logger.Error("failed to get chat details", slog.String("error", err.Error()))
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	messages, err := h.MessSrv.GetMessages(r.Context(), userID, chatID, beforeTime, anchorID, limit)
+	if err != nil {
+		h.logger.Error("failed to get messages", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -227,16 +251,17 @@ func (h *ChatHandler) AddMembersHandler(w http.ResponseWriter, r *http.Request) 
 
 	if err := h.ChatSrv.AddMembers(r.Context(), chatID, userID, members); err != nil {
 		h.logger.Error("failed to add members to chat", slog.String("error", err.Error()))
-		if err == customerrors.ErrUserAlreadyInChat {
+		switch err {
+		case customerrors.ErrUserAlreadyInChat:
 			http.Error(w, "conflict", http.StatusConflict)
 			return
-		} else if err == customerrors.ErrInvalidInput {
+		case customerrors.ErrInvalidInput:
 			http.Error(w, "not found", http.StatusNotFound)
 			return
-		} else if err == customerrors.ErrUserNotMemberOfChat {
+		case customerrors.ErrUserNotMemberOfChat:
 			http.Error(w, "no permission", http.StatusForbidden)
 			return
-		} else {
+		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

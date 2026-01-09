@@ -26,8 +26,8 @@ func NewConsumer(brokers []string, topic, groupID string, pgRepo PostgresUpdater
 		Brokers:  brokers,
 		GroupID:  groupID,
 		Topic:    topic,
-		MinBytes: 10e3, // 10KB
-		MaxBytes: 10e6, // 10MB
+		MinBytes: 10e3,
+		MaxBytes: 10e6,
 	})
 	return &Consumer{
 		reader: reader,

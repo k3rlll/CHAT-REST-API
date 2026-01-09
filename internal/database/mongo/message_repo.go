@@ -15,12 +15,12 @@ import (
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
+const collectionName = "messages"
+
 var (
 	errMessageNotFound = errors.New("message not found")
 	errMongoDB         = errors.New("mongo database error")
 )
-
-const collectionName = "messages"
 
 func NewMessageRepository(db *mongo.Database, logger *slog.Logger) *MessageRepository {
 	collection := db.Collection("messages")
@@ -78,10 +78,10 @@ func (r *MessageRepository) SaveMessage(ctx context.Context, msg interface{}) (s
 	return id.Hex(), nil
 }
 
-func (r *MessageRepository) EditMessage(ctx context.Context, senderID int64, chatID int64, msgID string, newText string) error {
+func (r *MessageRepository) EditMessage(ctx context.Context, senderID int64, chatID int64, msgID string, newText string) (int64, error) {
 	objID, err := primitive.ObjectIDFromHex(msgID)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	filter := bson.M{
@@ -99,13 +99,10 @@ func (r *MessageRepository) EditMessage(ctx context.Context, senderID int64, cha
 
 	res, err := r.coll.UpdateOne(ctx, filter, update)
 	if err != nil {
-		return fmt.Errorf("failed to update message: %w", err)
+		return 0, fmt.Errorf("failed to update message: %w", err)
 	}
 
-	if res.MatchedCount == 0 {
-		return errMongoDB
-	}
-	return nil
+	return res.MatchedCount, nil
 }
 
 func (r *MessageRepository) DeleteMessage(ctx context.Context, senderID, chatID int64, msgID []string) (int64, error) {
@@ -134,29 +131,42 @@ func (r *MessageRepository) DeleteMessage(ctx context.Context, senderID, chatID 
 	return res.DeletedCount, nil
 }
 
-func (r *MessageRepository) GetMessages(ctx context.Context, chatID, limit int64, lastMessage time.Time) ([]dom.Message, error) {
-	findOptions := options.Find()
+func (r *MessageRepository) GetMessages(ctx context.Context, chatID int64, anchorTime time.Time, anchorID string, limit int64) ([]dom.Message, error) {
+	findOptions := options.Find().
+		SetLimit(limit).
+		SetSort(bson.D{{Key: "created_at", Value: -1}, {Key: "_id", Value: -1}})
 
-	findOptions.SetLimit(limit)
+	filter := bson.M{"chat_id": chatID}
 
-	findOptions.SetSort(bson.D{{Key: "created_at", Value: -1}})
+	if !anchorTime.IsZero() {
+		var objID primitive.ObjectID
+		if anchorID != "" {
+			objID, _ = primitive.ObjectIDFromHex(anchorID)
+		}
 
-	filter := bson.M{
-		"chat_id":    chatID,
-		"created_at": bson.M{"$lt": lastMessage},
+		filter["$or"] = []bson.M{
+			{"created_at": bson.M{"$lt": anchorTime}},
+			{
+				"created_at": anchorTime,
+				"_id":        bson.M{"$lt": objID},
+			},
+		}
 	}
 
 	cursor, err := r.coll.Find(ctx, filter, findOptions)
 	if err != nil {
-		return []dom.Message{}, fmt.Errorf("failed to find: %w", err)
+		return nil, fmt.Errorf("mongo find error: %w", err)
 	}
 	defer cursor.Close(ctx)
 
 	var messages []dom.Message
-
 	if err := cursor.All(ctx, &messages); err != nil {
-		return nil, fmt.Errorf("failed to decode messages: %w", err)
+		return nil, fmt.Errorf("decode error: %w", err)
 	}
-	return messages, nil
 
+	if messages == nil {
+		messages = []dom.Message{}
+	}
+
+	return messages, nil
 }

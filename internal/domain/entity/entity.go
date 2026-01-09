@@ -7,7 +7,7 @@ import (
 )
 
 type Chat struct {
-	Id               int64     `json:"chat_id" `
+	ID              int64     `json:"chat_id" `
 	Title            string    `json:"title"`
 	IsPrivate        bool      `json:"is_private"`
 	CreatedAt        time.Time `json:"created_at"`
@@ -16,8 +16,13 @@ type Chat struct {
 	MembersCount     int       `json:"members_count"`
 }
 
+type ChatMember struct {
+	ChatID int64 `json:"chat_id"`
+	UserID int64 `json:"user_id"`
+}
+
 type Message struct {
-	Id             primitive.ObjectID `json:"message_id" bson:"_id,omitempty"`
+	ID             primitive.ObjectID `json:"message_id" bson:"_id,omitempty"`
 	Text           string             `json:"text" bson:"text"`
 	CreatedAt      time.Time          `json:"created_at" bson:"created_at"`
 	ChatID         int64              `json:"chat_id" bson:"chat_id"`

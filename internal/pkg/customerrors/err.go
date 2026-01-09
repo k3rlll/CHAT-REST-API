@@ -7,7 +7,6 @@ var (
 	ErrExpiredToken          = errors.New("expired token")
 	ErrEmailAlreadyExists    = errors.New("email already exists")
 	ErrUsernameAlreadyExists = errors.New("username already exists")
-	ErrMessageDoesNotExists  = errors.New("the messsage does not exists")
 	ErrUserNotMemberOfChat   = errors.New("user is not a member of the chat")
 	ErrFailedToCheck         = errors.New("failed to check")
 	ErrUserNotFound          = errors.New("user not found")
@@ -21,4 +20,5 @@ var (
 	ErrNotFound              = errors.New("not found")
 	ErrRefreshTokenNotFound  = errors.New("refresh token not found")
 	ErrRefreshTokenExpired   = errors.New("refresh token expired")
+	ErrMessageDoesNotExists  = errors.New("message does not exist")
 )

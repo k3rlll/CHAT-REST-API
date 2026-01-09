@@ -55,6 +55,7 @@ type Config struct {
 	Postgres Postgres `yaml:"postgres"`
 	MongoDB  MongoDB  `yaml:"mongodb"`
 	Redis    Redis    `yaml:"redis"`
+	Kafka    Kafka    `yaml:"kafka"`
 }
 
 type EnvConfig struct {

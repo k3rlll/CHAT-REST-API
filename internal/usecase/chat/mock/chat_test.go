@@ -1,12 +1,13 @@
-package mock
+package mock_test
 
 import (
 	context "context"
-	"io"
-	"log/slog"
+	"fmt"
 	dom "main/internal/domain/entity"
+	entity "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
-	service "main/internal/service/chat"
+	service "main/internal/usecase/chat"
+	"main/internal/usecase/chat/mock"
 	"testing"
 	"time"
 
@@ -24,7 +25,7 @@ func TestCreateChat(t *testing.T) {
 		title         string
 		isPrivate     bool
 		members       []int64
-		mockBehavior  func(chatRepo *MockChatRepositoryInterface)
+		mockBehavior  func(chatRepo *mock.MockChatRepositoryInterface)
 		isErr         bool
 		expectedChat  dom.Chat
 		expectedError error
@@ -34,11 +35,11 @@ func TestCreateChat(t *testing.T) {
 			title:     title,
 			isPrivate: false,
 			members:   members,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface) {
 				chatRepo.EXPECT().CreateChat(gomock.Any(), title, false, members).Return(int64(1), nil)
 			},
 			expectedChat: dom.Chat{
-				Id:        1,
+				ID:        1,
 				Title:     title,
 				IsPrivate: false,
 			},
@@ -50,7 +51,7 @@ func TestCreateChat(t *testing.T) {
 			title:     "",
 			isPrivate: false,
 			members:   members,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface) {
 
 			},
 			expectedChat:  dom.Chat{},
@@ -62,7 +63,7 @@ func TestCreateChat(t *testing.T) {
 			title:     title,
 			isPrivate: false,
 			members:   []int64{},
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface) {
 
 			},
 			expectedChat:  dom.Chat{},
@@ -74,7 +75,7 @@ func TestCreateChat(t *testing.T) {
 			title:     title,
 			isPrivate: false,
 			members:   members,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface) {
 				chatRepo.EXPECT().CreateChat(gomock.Any(), title, false, members).Return(int64(0), customerrors.ErrDatabase)
 			},
 			expectedChat:  dom.Chat{},
@@ -86,7 +87,7 @@ func TestCreateChat(t *testing.T) {
 			title:     "This title is way too long to be accepted",
 			isPrivate: false,
 			members:   members,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface) {
 			},
 			expectedChat:  dom.Chat{},
 			expectedError: customerrors.ErrInvalidInput,
@@ -97,7 +98,7 @@ func TestCreateChat(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			mockChatRepo := NewMockChatRepositoryInterface(ctrl)
+			mockChatRepo := mock.NewMockChatRepositoryInterface(ctrl)
 
 			if tt.mockBehavior != nil {
 				tt.mockBehavior(mockChatRepo)
@@ -127,14 +128,14 @@ func TestDeleteChat(t *testing.T) {
 	tests := []struct {
 		name          string
 		chatID        int64
-		mockBehavior  func(chatRepo *MockChatRepositoryInterface)
+		mockBehavior  func(chatRepo *mock.MockChatRepositoryInterface)
 		expectedError error
 		isErr         bool
 	}{
 		{
 			name:   "Successful chat deletion",
 			chatID: chatID,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface) {
 				chatRepo.EXPECT().CheckIfChatExists(gomock.Any(), chatID).Return(true, nil)
 				chatRepo.EXPECT().DeleteChat(gomock.Any(), chatID).Return(nil)
 			},
@@ -144,7 +145,7 @@ func TestDeleteChat(t *testing.T) {
 		{
 			name:   "Chat does not exist",
 			chatID: chatID,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface) {
 				chatRepo.EXPECT().CheckIfChatExists(gomock.Any(), chatID).Return(false, nil)
 			},
 			expectedError: customerrors.ErrNotFound,
@@ -153,7 +154,7 @@ func TestDeleteChat(t *testing.T) {
 		{
 			name:   "Repository error during existence check",
 			chatID: chatID,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface) {
 				chatRepo.EXPECT().CheckIfChatExists(gomock.Any(), chatID).Return(false, customerrors.ErrDatabase)
 			},
 			expectedError: customerrors.ErrDatabase,
@@ -162,7 +163,7 @@ func TestDeleteChat(t *testing.T) {
 		{
 			name:   "Repository error during chat deletion",
 			chatID: chatID,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface) {
 				chatRepo.EXPECT().CheckIfChatExists(gomock.Any(), chatID).Return(true, nil)
 				chatRepo.EXPECT().DeleteChat(gomock.Any(), chatID).Return(customerrors.ErrDatabase)
 			},
@@ -172,7 +173,7 @@ func TestDeleteChat(t *testing.T) {
 		{
 			name:   "Invalid chat ID",
 			chatID: -1,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface) {
 			},
 			expectedError: customerrors.ErrInvalidInput,
 			isErr:         true,
@@ -181,7 +182,7 @@ func TestDeleteChat(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			mockChatRepo := NewMockChatRepositoryInterface(ctrl)
+			mockChatRepo := mock.NewMockChatRepositoryInterface(ctrl)
 			if tt.mockBehavior != nil {
 				tt.mockBehavior(mockChatRepo)
 			}
@@ -200,125 +201,99 @@ func TestDeleteChat(t *testing.T) {
 }
 
 func TestOpenChat(t *testing.T) {
-	sillentLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	chatID := int64(1)
-	userID := int64(1)
-	testtime := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
-	testChat := dom.Chat{
-		Id:               chatID,
-		Title:            "Test Chat",
-		IsPrivate:        false,
-		CreatedAt:        testtime,
-		MembersID:        []int64{1, 2, 3},
-		MembersUsernames: []string{"user1", "user2", "user3"},
-		MembersCount:     3,
-	}
-	testMessages := []dom.Message{
-		{Id: 1, ChatID: chatID, SenderID: 2, SenderUsername: "user2", Text: "Hello", CreatedAt: testtime},
-		{Id: 2, ChatID: chatID, SenderID: 3, SenderUsername: "user3", Text: "Hi", CreatedAt: testtime},
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockChatRepo := mock.NewMockChatRepositoryInterface(ctrl)
+	mockMsgRepo := mock.NewMockMessageRepositoryInterface(ctrl)
+
+	now := time.Now()
+	testChat := entity.Chat{ID: 1, Title: "Test Chat", MembersID: []int64{10, 20}}
+	testMsgs := []entity.Message{{Text: "Hello from Mongo"}}
 
 	tests := []struct {
-		name             string
-		chatID           int64
-		userID           int64
-		mockBehavior     func(chatRepo *MockChatRepositoryInterface)
-		isMemberExpect   bool
-		expectedChat     dom.Chat
-		expectedMessages []dom.Message
-		expectedError    error
-		isErr            bool
+		name       string
+		chatID     int64
+		userID     int64
+		anchorTime time.Time
+		setup      func()
+		wantChat   entity.Chat
+		wantMsgs   []entity.Message
+		wantErr    error
 	}{
 		{
-			name:   "Successful OpenChat",
-			chatID: chatID,
-			userID: userID,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
-				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(true, nil)
-				chatRepo.EXPECT().GetChatDetails(gomock.Any(), chatID).Return(dom.Chat{
-					Id:               chatID,
-					Title:            testChat.Title,
-					IsPrivate:        testChat.IsPrivate,
-					CreatedAt:        testChat.CreatedAt,
-					MembersID:        []int64{1, 2, 3},
-					MembersUsernames: []string{"user1", "user2", "user3"},
-					MembersCount:     testChat.MembersCount,
-				}, nil)
-				chatRepo.EXPECT().OpenChat(gomock.Any(), chatID, userID).Return(testMessages, nil)
+			name:       "Success: Chat opened fully",
+			chatID:     1,
+			userID:     10,
+			anchorTime: now,
+			setup: func() {
+				mockChatRepo.EXPECT().CheckIfChatExists(gomock.Any(), int64(1)).Return(true, nil)
+				mockChatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), int64(1), int64(10)).Return(true, nil)
+				mockChatRepo.EXPECT().GetChatDetails(gomock.Any(), int64(1)).Return(testChat, nil)
+				mockMsgRepo.EXPECT().GetMessages(gomock.Any(), int64(1), now).Return(testMsgs, nil)
 			},
-			expectedChat:     testChat,
-			expectedMessages: testMessages,
-			expectedError:    nil,
-			isErr:            false,
+			wantChat: entity.Chat{ID: 1, Title: "Test Chat", MembersID: []int64{10, 20}, MembersCount: 2},
+			wantMsgs: testMsgs,
+			wantErr:  nil,
 		},
 		{
-			name:   "Repository error during get chat details",
-			chatID: chatID,
-			userID: userID,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
-				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(true, nil)
-				chatRepo.EXPECT().GetChatDetails(gomock.Any(), chatID).Return(dom.Chat{}, customerrors.ErrDatabase)
-			},
-			expectedChat:  dom.Chat{},
-			expectedError: customerrors.ErrDatabase,
-			isErr:         true,
+			name:    "Fail: Invalid ChatID (Negative)",
+			chatID:  -5,
+			userID:  10,
+			setup:   func() {}, 
+			wantErr: customerrors.ErrInvalidInput,
 		},
 		{
-			name:   "Invalid chat ID",
-			chatID: -1,
-			userID: userID,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
+			name:   "Fail: Chat does not exist",
+			chatID: 99,
+			userID: 10,
+			setup: func() {
+				mockChatRepo.EXPECT().CheckIfChatExists(gomock.Any(), int64(99)).Return(false, nil)
 			},
-			expectedChat:     dom.Chat{},
-			expectedMessages: []dom.Message{},
-			expectedError:    customerrors.ErrInvalidInput,
-			isErr:            true,
+			wantErr: customerrors.ErrNotFound,
 		},
 		{
-			name:   "User not a member of the chat",
-			chatID: chatID,
-			userID: userID,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
-				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(false, nil)
+			name:   "Fail: User is not a member",
+			chatID: 1,
+			userID: 999,
+			setup: func() {
+				mockChatRepo.EXPECT().CheckIfChatExists(gomock.Any(), int64(1)).Return(true, nil)
+				mockChatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), int64(1), int64(999)).Return(false, nil)
 			},
-			isMemberExpect:   false,
-			expectedChat:     dom.Chat{},
-			expectedMessages: []dom.Message{},
-			expectedError:    customerrors.ErrUserNotMemberOfChat,
-			isErr:            true,
+			wantErr: customerrors.ErrUserNotMemberOfChat,
 		},
 		{
-			name:   "Error checking if user is member of chat",
-			chatID: chatID,
-			userID: userID,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
-				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(false, customerrors.ErrFailedToCheck)
+			name:   "Fail: Database error on details",
+			chatID: 1,
+			userID: 10,
+			setup: func() {
+				mockChatRepo.EXPECT().CheckIfChatExists(gomock.Any(), int64(1)).Return(true, nil)
+				mockChatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), int64(1), int64(10)).Return(true, nil)
+				mockChatRepo.EXPECT().GetChatDetails(gomock.Any(), int64(1)).Return(entity.Chat{}, fmt.Errorf("sql error"))
 			},
-			isMemberExpect:   false,
-			expectedChat:     dom.Chat{},
-			expectedMessages: []dom.Message{},
-			expectedError:    customerrors.ErrFailedToCheck,
-			isErr:            true,
+			wantErr: fmt.Errorf("sql error"),
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			mockChatRepo := NewMockChatRepositoryInterface(ctrl)
-			if tt.mockBehavior != nil {
-				tt.mockBehavior(mockChatRepo)
-			}
-			ChatService := service.NewChatService(nil, mockChatRepo, sillentLogger)
-			chat, message, err := ChatService.OpenChat(context.Background(), tt.chatID, tt.userID)
 
-			if tt.isErr {
-				if tt.expectedError != nil {
-					assert.ErrorIs(t, err, tt.expectedError)
-				}
+			tt.setup()
+			service := &service.ChatService{
+				Chat: mockChatRepo,
+				Msg:  mockMsgRepo,
+			}
+
+			gotChat, gotMsgs, err := service.OpenChat(context.Background(), tt.chatID, tt.userID, tt.anchorTime)
+
+			if tt.wantErr != nil {
+				assert.Error(t, err)
+
+				assert.Contains(t, err.Error(), tt.wantErr.Error())
 			} else {
 				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedMessages, message)
-				assert.Equal(t, tt.expectedChat, chat)
+				assert.Equal(t, tt.wantChat, gotChat)
+				assert.Equal(t, tt.wantMsgs, gotMsgs)
 			}
 		})
 	}
@@ -333,7 +308,7 @@ func TestAddMembers(t *testing.T) {
 		chatID        int64
 		userID        int64
 		members       []int64
-		mockBehavior  func(chatRepo *MockChatRepositoryInterface, userSvc *MockUserInterface)
+		mockBehavior  func(chatRepo *mock.MockChatRepositoryInterface, userSvc *mock.MockUserInterface)
 		expectedError error
 		isErr         bool
 	}{
@@ -342,7 +317,7 @@ func TestAddMembers(t *testing.T) {
 			chatID:  chatID,
 			userID:  userID,
 			members: testMembers,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface, userSvc *MockUserInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface, userSvc *mock.MockUserInterface) {
 				//проверка инициатора на членство в чате
 				userSvc.EXPECT().CheckUserExists(gomock.Any(), userID).Return(true)
 				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(true, nil)
@@ -363,7 +338,7 @@ func TestAddMembers(t *testing.T) {
 			chatID:  chatID,
 			userID:  userID,
 			members: testMembers,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface, userSvc *MockUserInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface, userSvc *mock.MockUserInterface) {
 				userSvc.EXPECT().CheckUserExists(gomock.Any(), userID).Return(false)
 			},
 
@@ -375,7 +350,7 @@ func TestAddMembers(t *testing.T) {
 			chatID:  chatID,
 			userID:  userID,
 			members: testMembers,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface, userSvc *MockUserInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface, userSvc *mock.MockUserInterface) {
 				userSvc.EXPECT().CheckUserExists(gomock.Any(), userID).Return(true)
 				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(false, nil)
 			},
@@ -387,10 +362,9 @@ func TestAddMembers(t *testing.T) {
 			chatID:  chatID,
 			userID:  userID,
 			members: testMembers,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface, userSvc *MockUserInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface, userSvc *mock.MockUserInterface) {
 				userSvc.EXPECT().CheckUserExists(gomock.Any(), userID).Return(true)
 				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(true, nil)
-				//проверка каждого нового участника на существование и членство в чате
 				userSvc.EXPECT().CheckUserExists(gomock.Any(), testMembers[0]).Return(false)
 			},
 			expectedError: customerrors.ErrUserNotFound,
@@ -401,7 +375,7 @@ func TestAddMembers(t *testing.T) {
 			chatID:  chatID,
 			userID:  userID,
 			members: testMembers,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface, userSvc *MockUserInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface, userSvc *mock.MockUserInterface) {
 				userSvc.EXPECT().CheckUserExists(gomock.Any(), userID).Return(true)
 				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(true, nil)
 				//проверка каждого нового участника на существование и членство в чате
@@ -415,8 +389,8 @@ func TestAddMembers(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			mockChatRepo := NewMockChatRepositoryInterface(ctrl)
-			mockUserSvc := NewMockUserInterface(ctrl)
+			mockChatRepo := mock.NewMockChatRepositoryInterface(ctrl)
+			mockUserSvc := mock.NewMockUserInterface(ctrl)
 			if tt.mockBehavior != nil {
 				tt.mockBehavior(mockChatRepo, mockUserSvc)
 			}
@@ -442,7 +416,7 @@ func TestRemoveMember(t *testing.T) {
 		name          string
 		chatID        int64
 		userID        int64
-		mockBehavior  func(chatRepo *MockChatRepositoryInterface)
+		mockBehavior  func(chatRepo *mock.MockChatRepositoryInterface)
 		expectedError error
 		isErr         bool
 	}{
@@ -450,7 +424,7 @@ func TestRemoveMember(t *testing.T) {
 			name:   "Successful remove member",
 			chatID: chatID,
 			userID: userID,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface) {
 				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(true, nil)
 				chatRepo.EXPECT().RemoveMember(gomock.Any(), chatID, userID).Return(nil)
 			},
@@ -461,7 +435,7 @@ func TestRemoveMember(t *testing.T) {
 			name:   "User is not member of chat",
 			chatID: chatID,
 			userID: userID,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface) {
 				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(false, nil)
 			},
 			expectedError: customerrors.ErrUserNotMemberOfChat,
@@ -471,7 +445,7 @@ func TestRemoveMember(t *testing.T) {
 			name:   "Invalid input",
 			chatID: -1,
 			userID: 0,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface) {
 
 			},
 			expectedError: customerrors.ErrInvalidInput,
@@ -481,7 +455,7 @@ func TestRemoveMember(t *testing.T) {
 			name:   "Repository error during membership check",
 			chatID: chatID,
 			userID: userID,
-			mockBehavior: func(chatRepo *MockChatRepositoryInterface) {
+			mockBehavior: func(chatRepo *mock.MockChatRepositoryInterface) {
 				chatRepo.EXPECT().CheckIsMemberOfChat(gomock.Any(), chatID, userID).Return(false, customerrors.ErrFailedToCheck)
 			},
 			expectedError: customerrors.ErrFailedToCheck,
@@ -491,7 +465,7 @@ func TestRemoveMember(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			mockChatRepo := NewMockChatRepositoryInterface(ctrl)
+			mockChatRepo := mock.NewMockChatRepositoryInterface(ctrl)
 			if tt.mockBehavior != nil {
 				tt.mockBehavior(mockChatRepo)
 			}

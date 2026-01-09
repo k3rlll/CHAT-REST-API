@@ -42,7 +42,7 @@ ZOOKEEPER:
 
 kafka:
   consumer_group: "chat_service_group"
-  broker: "localhost:9092"
+  brokers: "localhost:9092"
   topic: "chat_messages"
   image: confluentinc/cp-kafka:7.3.0
     depends_on:
