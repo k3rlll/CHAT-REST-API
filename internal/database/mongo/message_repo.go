@@ -8,6 +8,7 @@ import (
 	"time"
 
 	dom "main/internal/domain/entity"
+	"main/internal/pkg/customerrors"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -168,4 +169,24 @@ func (r *MessageRepository) GetMessages(ctx context.Context, chatID int64, ancho
 	}
 
 	return messages, nil
+}
+
+func (r *MessageRepository) GetLatestMessage(ctx context.Context, chatID int64) (dom.Message, error) {
+	filter := bson.M{"chat_id": chatID}
+
+	opts := options.FindOne().SetSort(bson.D{
+		{Key: "created_at", Value: -1},
+		{Key: "_id", Value: -1},
+	})
+
+	var msg dom.Message
+	err := r.coll.FindOne(ctx, filter, opts).Decode(&msg)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return dom.Message{}, customerrors.ErrMessageDoesNotExists
+		}
+		return dom.Message{}, fmt.Errorf("failed to get latest message: %w", err)
+	}
+
+	return msg, nil
 }

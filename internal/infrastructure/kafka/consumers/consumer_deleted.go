@@ -1,4 +1,4 @@
-package kafka
+package consumers
 
 import (
 	"context"
@@ -6,22 +6,18 @@ import (
 	"fmt"
 	"log/slog"
 	"main/internal/domain/events"
-	"time"
 
 	"github.com/segmentio/kafka-go"
 )
 
-type PostgresUpdater interface {
-	UpdateChatLastMessage(ctx context.Context, chatID int64, at time.Time) error
+type ConsumerDeleted struct {
+	reader  *kafka.Reader
+	chat    ChatPostgresUpdater
+	message MessageRepository
+	logger  *slog.Logger
 }
 
-type ConsumerCreated struct {
-	reader *kafka.Reader
-	pgRepo PostgresUpdater
-	logger *slog.Logger
-}
-
-func NewConsumerCreated(brokers []string, topic, groupID string, pgRepo PostgresUpdater, logger *slog.Logger) *ConsumerCreated {
+func NewConsumerDeleted(brokers []string, topic, groupID string, chat ChatPostgresUpdater, logger *slog.Logger) *ConsumerDeleted {
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:  brokers,
 		GroupID:  groupID,
@@ -29,14 +25,14 @@ func NewConsumerCreated(brokers []string, topic, groupID string, pgRepo Postgres
 		MinBytes: 10e3,
 		MaxBytes: 10e6,
 	})
-	return &ConsumerCreated{
+	return &ConsumerDeleted{
 		reader: reader,
-		pgRepo: pgRepo,
+		chat:   chat,
 		logger: logger,
 	}
 }
 
-func (c *ConsumerCreated) StartConsumerCreated(ctx context.Context) error {
+func (c *ConsumerDeleted) StartConsumerDeleted(ctx context.Context) error {
 	c.logger.Info("Kafka consumer started...")
 	defer c.reader.Close()
 	for {
@@ -59,13 +55,16 @@ func (c *ConsumerCreated) StartConsumerCreated(ctx context.Context) error {
 	}
 }
 
-func (c *ConsumerCreated) processMessage(ctx context.Context, msg kafka.Message) error {
+func (c *ConsumerDeleted) processMessage(ctx context.Context, msg kafka.Message) error {
 	var EventMessageCreated events.EventMessageCreated
 
 	if err := json.Unmarshal(msg.Value, &EventMessageCreated); err != nil {
 		return fmt.Errorf("failed to unmarshal message: %w", err)
 
 	}
-
-	return c.pgRepo.UpdateChatLastMessage(ctx, EventMessageCreated.ChatID, EventMessageCreated.CreatedAt)
+	res, err := c.message.GetLatestMessage(ctx, EventMessageCreated.ChatID)
+	if err != nil {
+		return fmt.Errorf("failed to get latest message: %w", err)
+	}
+	return c.chat.UpdateChatLastMessage(ctx, EventMessageCreated.ChatID, res.Text, res.CreatedAt)
 }

@@ -214,8 +214,25 @@ func (c *ChatRepository) RemoveMember(ctx context.Context, chatID, userID int64)
 	return err
 }
 
-func (c *ChatRepository) UpdateChatLastMessage(ctx context.Context, chatID int64, at time.Time) error {
+func (c *ChatRepository) GetLastMessage(ctx context.Context, chatID int64) (int64, error) {
+	var id int64
+	query := "SELECT last_message_id from chats WHERE id=$1"
+	err := c.pool.QueryRow(ctx, query, chatID).Scan(&id)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get last message id: %w", err)
+	}
+	return id, nil
+}
+
+func (c *ChatRepository) UpdateChatLastMessage(ctx context.Context,
+	chatID int64,
+	messageText string,
+	createdAt time.Time) error {
+
 	_, err := c.pool.Exec(ctx,
-		"UPDATE chats SET last_message_at=$1 WHERE id=$2", at, chatID)
-	return err
+		"UPDATE chats SET last_message_text=$1, last_message_created_at=$2 WHERE id=$3", messageText, createdAt, chatID)
+	if err != nil {
+		return err
+	}
+	return nil
 }

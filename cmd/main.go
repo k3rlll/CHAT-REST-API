@@ -18,6 +18,7 @@ import (
 	chat "main/internal/database/postgres/chat_repo"
 	user "main/internal/database/postgres/user_repo"
 	rdb "main/internal/database/redis"
+	kafka "main/internal/infrastructure/kafka"
 	claims "main/internal/pkg/jwt"
 	mwMiddleware "main/internal/server/middleware"
 	httpHandler "main/internal/transport/handlers"
@@ -28,6 +29,7 @@ import (
 	"main/internal/transport/ws"
 	srvAuth "main/internal/usecase/auth"
 	srvChat "main/internal/usecase/chat"
+	eventHandler "main/internal/usecase/event"
 	srvMessage "main/internal/usecase/message"
 	srvUser "main/internal/usecase/user"
 
@@ -55,6 +57,12 @@ func main() {
 		logger.Error("failed to create JWT claims", slog.String("error", err.Error()))
 		return
 	}
+
+	deletedConsumerHandler := kafka.NewConsumer(
+		cfg.Kafka.Brokers,
+		"msg_deleted_topic",
+		"chat_group",
+	)
 
 	//--------------Databases Connections-----------------
 	postgres, err := psql.NewDBPool(cfg.DatabaseDSN())
@@ -94,11 +102,40 @@ func main() {
 	jwtService := srvAuth.NewTokenService()
 	NewJWTFacade := srvAuth.NewJWTFacade(NewClaims, NewCache)
 
+	//-----------------------Kafka-------------------------------
+	event := eventHandler.NewEventHandlers(chatRepo, msgRepo)
+	deletedProducer := kafka.NewProducer(cfg.Kafka.Brokers, "msg_deleted_topic")
+	createdProducer := kafka.NewProducer(cfg.Kafka.Brokers, "msg_created_topic")
+	defer deletedProducer.Close()
+	defer createdProducer.Close()
+	deletedConsumer := kafka.NewConsumer(
+		cfg.Kafka.Brokers,
+		"msg_deleted_topic",
+		"chat_group",
+		event.HandleMessageDeleted,
+		logger,
+	)
+	createdConsumer := kafka.NewConsumer(
+		cfg.Kafka.Brokers,
+		"msg_created_topic",
+		"chat_group",
+		event.HandleMessageCreated,
+		logger,
+	)
+	consumerManager := kafka.NewConsumerManager([]*kafka.Consumer{deletedConsumer, createdConsumer})
+	go func() {
+		if err := consumerManager.StartAll(context.Background()); err != nil {
+			logger.Error("Kafka consumers stopped with error", slog.String("error", err.Error()))
+		}
+	}()
+
 	//-----------------------Services-------------------------------
 	userService := srvUser.NewUserService(userRepo, logger)
 	authService := srvAuth.NewAuthService(authRepo, jwtService, NewCache)
 	chatService := srvChat.NewChatService(userRepo, chatRepo, logger)
 	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, logger)
+
+	//-----------------------HTTP Server-------------------------------
 
 	wsManager := ws.NewManager(logger)
 	logger.Info("Connected to database successfully")

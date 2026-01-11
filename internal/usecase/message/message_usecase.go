@@ -28,6 +28,7 @@ type MessageRepository interface {
 	SaveMessage(ctx context.Context, msg interface{}) (string, error)
 	EditMessage(ctx context.Context, senderID int64, chatID int64, msgID string, newText string) (int64, error)
 	DeleteMessage(ctx context.Context, senderID, chatID int64, msgID []string) (int64, error)
+	GetLatestMessage(ctx context.Context, chatID int64) (dom.Message, error)
 	GetMessages(ctx context.Context, chatID int64, anchorTime time.Time, anchorID string, limit int64) ([]dom.Message, error)
 }
 
@@ -100,10 +101,10 @@ func (m *MessageService) DeleteMessage(ctx context.Context, senderID int64, chat
 	if !isMember {
 		return customerrors.ErrUserNotMemberOfChat
 	}
+
 	events := events.EventMessageDeleted{
 		MessageIDs: msgID,
-		ChatID:     chatID,
-		DeletedAt:  time.Now()}
+		ChatID:     chatID}
 
 	if err := m.Kafka.SendMessageDeleted(ctx, events); err != nil {
 		m.Logger.Warn("failed to publish event", "error", err)

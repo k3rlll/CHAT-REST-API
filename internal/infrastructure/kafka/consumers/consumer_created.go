@@ -1,4 +1,4 @@
-package kafka
+package consumers
 
 import (
 	"context"
@@ -10,13 +10,13 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-type ConsumerDeleted struct {
+type ConsumerCreated struct {
 	reader *kafka.Reader
-	pgRepo PostgresUpdater
+	chat   ChatPostgresUpdater
 	logger *slog.Logger
 }
 
-func NewConsumerDeleted(brokers []string, topic, groupID string, pgRepo PostgresUpdater, logger *slog.Logger) *ConsumerDeleted {
+func NewConsumerCreated(brokers []string, topic, groupID string, chat ChatPostgresUpdater, logger *slog.Logger) *ConsumerCreated {
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:  brokers,
 		GroupID:  groupID,
@@ -24,14 +24,14 @@ func NewConsumerDeleted(brokers []string, topic, groupID string, pgRepo Postgres
 		MinBytes: 10e3,
 		MaxBytes: 10e6,
 	})
-	return &ConsumerDeleted{
+	return &ConsumerCreated{
 		reader: reader,
-		pgRepo: pgRepo,
+		chat:   chat,
 		logger: logger,
 	}
 }
 
-func (c *ConsumerDeleted) StartConsumerDeleted(ctx context.Context) error {
+func (c *ConsumerCreated) StartConsumerCreated(ctx context.Context) error {
 	c.logger.Info("Kafka consumer started...")
 	defer c.reader.Close()
 	for {
@@ -54,7 +54,7 @@ func (c *ConsumerDeleted) StartConsumerDeleted(ctx context.Context) error {
 	}
 }
 
-func (c *ConsumerDeleted) processMessage(ctx context.Context, msg kafka.Message) error {
+func (c *ConsumerCreated) processMessage(ctx context.Context, msg kafka.Message) error {
 	var EventMessageCreated events.EventMessageCreated
 
 	if err := json.Unmarshal(msg.Value, &EventMessageCreated); err != nil {
@@ -62,5 +62,5 @@ func (c *ConsumerDeleted) processMessage(ctx context.Context, msg kafka.Message)
 
 	}
 
-	return c.pgRepo.UpdateChatLastMessage(ctx, EventMessageCreated.ChatID, EventMessageCreated.CreatedAt)
+	return c.chat.UpdateChatLastMessage(ctx, EventMessageCreated.ChatID, EventMessageCreated.Text, EventMessageCreated.CreatedAt)
 }
