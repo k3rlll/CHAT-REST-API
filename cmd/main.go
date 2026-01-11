@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	config "main/internal/config"
-	"main/internal/infrastructure/kafka"
 	"net"
 	"net/http"
 	"os"
@@ -48,25 +47,22 @@ func main() {
 	secretKey := config.MySecretKey()
 
 	logger := setupLogger(cfg.Env)
-
 	logger.Info("Starting application", slog.String("env", cfg.Env))
 	addr := net.JoinHostPort(cfg.Server.Host, strconv.Itoa(cfg.Server.Port))
-
 	router := chi.NewRouter()
-
 	NewClaims, err := claims.NewClaims(secretKey)
 	if err != nil {
 		logger.Error("failed to create JWT claims", slog.String("error", err.Error()))
 		return
 	}
 
+	//--------------Databases Connections-----------------
 	postgres, err := psql.NewDBPool(cfg.DatabaseDSN())
 	if err != nil {
 		logger.Error("failed to connect to database", slog.String("error", err.Error()))
 		return
 	}
 	defer postgres.Close()
-
 	if err := postgres.Ping(context.Background()); err != nil {
 		logger.Error("failed to ping database", slog.String("error", err.Error()))
 		return
@@ -89,8 +85,8 @@ func main() {
 	}
 	defer redis.Close()
 
+	//-----------------------Repositories---------------------------
 	NewCache := rdb.NewCache(redis)
-
 	authRepo := auth.NewAuthRepository(postgres, logger)
 	userRepo := user.NewUserRepository(postgres)
 	chatRepo := chat.NewChatRepository(postgres, logger)
@@ -98,21 +94,11 @@ func main() {
 	jwtService := srvAuth.NewTokenService()
 	NewJWTFacade := srvAuth.NewJWTFacade(NewClaims, NewCache)
 
-	kafkaProducer := kafka.NewProducer(cfg.Kafka.Brokers, cfg.Kafka.Topic)
-	defer kafkaProducer.Close()
-
-	kafkaConsumer := kafka.NewConsumer(cfg.Kafka.Brokers, cfg.Kafka.Topic, cfg.Kafka.ConsumerGroup,
-		chatRepo, logger)
-	go func() {
-		if err := kafkaConsumer.StartConsuming(context.Background()); err != nil {
-			logger.Error("kafka consumer error", slog.String("error", err.Error()))
-		}
-	}()
-
+	//-----------------------Services-------------------------------
 	userService := srvUser.NewUserService(userRepo, logger)
 	authService := srvAuth.NewAuthService(authRepo, jwtService, NewCache)
 	chatService := srvChat.NewChatService(userRepo, chatRepo, logger)
-	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, kafkaProducer, logger)
+	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, logger)
 
 	wsManager := ws.NewManager(logger)
 	logger.Info("Connected to database successfully")
@@ -130,6 +116,7 @@ func main() {
 		MaxAge:           300,
 	}))
 
+	//-----------------------Handlers-------------------------------
 	userHandler := UserHandler.NewUserHandler(userService, NewJWTFacade, logger)
 	authHandler := AuthHandler.NewAuthHandler(authService, NewJWTFacade, logger)
 	chatHandler := ChatHandler.NewChatHandler(messageService, chatService, logger, NewJWTFacade)

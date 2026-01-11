@@ -33,6 +33,7 @@ type MessageRepository interface {
 
 type KafkaProducer interface {
 	SendMessageCreated(ctx context.Context, event events.EventMessageCreated) error
+	SendMessageDeleted(ctx context.Context, event events.EventMessageDeleted) error
 }
 
 type MessageService struct {
@@ -98,6 +99,14 @@ func (m *MessageService) DeleteMessage(ctx context.Context, senderID int64, chat
 	}
 	if !isMember {
 		return customerrors.ErrUserNotMemberOfChat
+	}
+	events := events.EventMessageDeleted{
+		MessageIDs: msgID,
+		ChatID:     chatID,
+		DeletedAt:  time.Now()}
+
+	if err := m.Kafka.SendMessageDeleted(ctx, events); err != nil {
+		m.Logger.Warn("failed to publish event", "error", err)
 	}
 
 	deletedCount, err := m.Msg.DeleteMessage(ctx, senderID, chatID, msgID)

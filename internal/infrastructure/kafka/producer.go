@@ -46,3 +46,20 @@ func (p *Producer) SendMessageCreated(ctx context.Context, event events.EventMes
 	}
 	return nil
 }
+
+func (p *Producer) SendMessageDeleted(ctx context.Context, event events.EventMessageDeleted) error {
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return fmt.Errorf("failed to marshal event: %w", err)
+	}
+
+	delMsg := kafka.Message{
+		Key:   []byte(fmt.Sprintf("%d", event.ChatID)),
+		Value: payload,
+		Time:  time.Now(),
+	}
+	if err := p.writer.WriteMessages(ctx, delMsg); err != nil {
+		return fmt.Errorf("failed to write messages to kafka: %w", err)
+	}
+	return nil
+}

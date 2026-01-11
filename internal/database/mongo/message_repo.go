@@ -111,8 +111,7 @@ func (r *MessageRepository) DeleteMessage(ctx context.Context, senderID, chatID 
 	for _, id := range msgID {
 		objID, err := primitive.ObjectIDFromHex(id)
 		if err != nil {
-			r.logger.Warn("invalid message ID", "id", id, "error", err)
-			continue
+			return 0, fmt.Errorf("invalid message ID: %w", err)
 		}
 		oids = append(oids, objID)
 	}

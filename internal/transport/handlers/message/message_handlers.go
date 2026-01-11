@@ -9,6 +9,7 @@ import (
 	"main/internal/transport/ws"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi"
 )
@@ -171,8 +172,10 @@ func (h *MessageHandler) DeleteMessageHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	go func(ctx context.Context, chatID int64, userID int64) {
-		membersId, err := h.ChatSrv.GetChatDetails(ctx, chatID, userID)
+	go func(chatID int64, userID int64) {
+		bctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		membersId, err := h.ChatSrv.GetChatDetails(bctx, chatID, userID)
 		if err != nil {
 			h.logger.Error("failed to get chat members", slog.Any("error", err.Error()))
 			return
@@ -185,7 +188,7 @@ func (h *MessageHandler) DeleteMessageHandler(w http.ResponseWriter, r *http.Req
 			h.upgrader.WsUnicast(memberID, wsPayload)
 		}
 
-	}(context.Background(), request.ChatID, request.UserID)
+	}(request.ChatID, request.UserID)
 
 	w.WriteHeader(http.StatusOK)
 }

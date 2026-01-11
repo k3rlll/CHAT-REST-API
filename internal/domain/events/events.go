@@ -10,3 +10,9 @@ type EventMessageCreated struct {
 	SenderID  int64     `json:"sender_id"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+type EventMessageDeleted struct {
+	MessageIDs []string  `json:"message_ids"`
+	ChatID     int64     `json:"chat_id"`
+	DeletedAt  time.Time `json:"deleted_at"`
+}
