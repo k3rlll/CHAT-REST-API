@@ -1,4 +1,4 @@
-package middleware
+package middleware_test
 
 import (
 	"context"
@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	middleware "main/internal/delivery/http/middleware_auth"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -65,7 +67,7 @@ func TestJWTAuth(t *testing.T) {
 		{
 			name:         "Invalid Header Format",
 			headerName:   "Authorization",
-			headerValue:  "Basic 12345", // Не Bearer
+			headerValue:  "Basic 12345",
 			mockBehavior: func(m *MockJWTManager) {},
 			expectedCode: 401,
 		},
@@ -96,7 +98,7 @@ func TestJWTAuth(t *testing.T) {
 			mockManager := new(MockJWTManager)
 			tt.mockBehavior(mockManager)
 
-			middleware := JWTAuth(mockManager)
+			middleware := middleware.JWTAuth(mockManager)
 
 			nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
@@ -107,17 +109,14 @@ func TestJWTAuth(t *testing.T) {
 				w.WriteHeader(http.StatusOK)
 			})
 
-			// 4. Создаем запрос
 			req := httptest.NewRequest("GET", "/", nil)
 			if tt.headerName != "" {
 				req.Header.Set(tt.headerName, tt.headerValue)
 			}
 			w := httptest.NewRecorder()
 
-			// 5. ЗАПУСК: Оборачиваем nextHandler в наше middleware и вызываем
 			middleware(nextHandler).ServeHTTP(w, req)
 
-			// 6. Проверки
 			assert.Equal(t, tt.expectedCode, w.Code)
 
 			mockManager.AssertExpectations(t)

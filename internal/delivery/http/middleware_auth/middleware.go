@@ -1,4 +1,4 @@
-package middleware
+package middleware_auth
 
 import (
 	"context"
@@ -89,7 +89,7 @@ func JWTAuth(manager JWTManager) func(http.Handler) http.Handler {
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), "userID", userID)
+			ctx := context.WithValue(r.Context(), "user_id", userID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}

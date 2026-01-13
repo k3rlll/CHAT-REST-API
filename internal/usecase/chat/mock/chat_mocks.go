@@ -184,18 +184,18 @@ func (m *MockMessageRepositoryInterface) EXPECT() *MockMessageRepositoryInterfac
 }
 
 // GetMessages mocks base method.
-func (m *MockMessageRepositoryInterface) GetMessages(ctx context.Context, chatID int64, anchorTime time.Time) ([]entity.Message, error) {
+func (m *MockMessageRepositoryInterface) GetMessages(ctx context.Context, chatID int64, anchorTime time.Time, anchorID string, limit int64) ([]entity.Message, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMessages", ctx, chatID, anchorTime)
+	ret := m.ctrl.Call(m, "GetMessages", ctx, chatID, anchorTime, anchorID, limit)
 	ret0, _ := ret[0].([]entity.Message)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetMessages indicates an expected call of GetMessages.
-func (mr *MockMessageRepositoryInterfaceMockRecorder) GetMessages(ctx, chatID, anchorTime any) *gomock.Call {
+func (mr *MockMessageRepositoryInterfaceMockRecorder) GetMessages(ctx, chatID, anchorTime, anchorID, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMessages", reflect.TypeOf((*MockMessageRepositoryInterface)(nil).GetMessages), ctx, chatID, anchorTime)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMessages", reflect.TypeOf((*MockMessageRepositoryInterface)(nil).GetMessages), ctx, chatID, anchorTime, anchorID, limit)
 }
 
 // MockUserInterface is a mock of UserInterface interface.

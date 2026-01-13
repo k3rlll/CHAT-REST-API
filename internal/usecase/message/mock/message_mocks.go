@@ -112,6 +112,21 @@ func (mr *MockMessageRepositoryMockRecorder) EditMessage(ctx, senderID, chatID, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EditMessage", reflect.TypeOf((*MockMessageRepository)(nil).EditMessage), ctx, senderID, chatID, msgID, newText)
 }
 
+// GetLatestMessage mocks base method.
+func (m *MockMessageRepository) GetLatestMessage(ctx context.Context, chatID int64) (entity.Message, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLatestMessage", ctx, chatID)
+	ret0, _ := ret[0].(entity.Message)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLatestMessage indicates an expected call of GetLatestMessage.
+func (mr *MockMessageRepositoryMockRecorder) GetLatestMessage(ctx, chatID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestMessage", reflect.TypeOf((*MockMessageRepository)(nil).GetLatestMessage), ctx, chatID)
+}
+
 // GetMessages mocks base method.
 func (m *MockMessageRepository) GetMessages(ctx context.Context, chatID int64, anchorTime time.Time, anchorID string, limit int64) ([]entity.Message, error) {
 	m.ctrl.T.Helper()
@@ -167,7 +182,7 @@ func (m *MockKafkaProducer) EXPECT() *MockKafkaProducerMockRecorder {
 }
 
 // SendMessageCreated mocks base method.
-func (m *MockKafkaProducer) SendMessageCreated(ctx context.Context, event events.EventMessageCreated) error {
+func (m *MockKafkaProducer) SendMessageCreated(ctx context.Context, event events.MessageCreated) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendMessageCreated", ctx, event)
 	ret0, _ := ret[0].(error)
@@ -178,4 +193,18 @@ func (m *MockKafkaProducer) SendMessageCreated(ctx context.Context, event events
 func (mr *MockKafkaProducerMockRecorder) SendMessageCreated(ctx, event any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMessageCreated", reflect.TypeOf((*MockKafkaProducer)(nil).SendMessageCreated), ctx, event)
+}
+
+// SendMessageDeleted mocks base method.
+func (m *MockKafkaProducer) SendMessageDeleted(ctx context.Context, event events.MessageDeleted) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SendMessageDeleted", ctx, event)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SendMessageDeleted indicates an expected call of SendMessageDeleted.
+func (mr *MockKafkaProducerMockRecorder) SendMessageDeleted(ctx, event any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendMessageDeleted", reflect.TypeOf((*MockKafkaProducer)(nil).SendMessageDeleted), ctx, event)
 }

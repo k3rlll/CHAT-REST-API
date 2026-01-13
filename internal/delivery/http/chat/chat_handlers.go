@@ -6,10 +6,9 @@ import (
 	"log/slog"
 	dom "main/internal/domain/entity"
 	"strconv"
-	"time"
 
+	mwMiddleware "main/internal/delivery/http/middleware_auth"
 	"main/internal/pkg/customerrors"
-	mwMiddleware "main/internal/server/middleware"
 	"net/http"
 
 	"github.com/go-chi/chi"
@@ -22,14 +21,8 @@ type ChatHandler struct {
 	Manager JWTManager
 }
 
-type UserService interface {
-	RegisterUser(ctx context.Context, username, email, password string) (dom.User, error)
-	SearchUser(ctx context.Context, query string) ([]dom.User, error)
-}
-
 type MessageService interface {
-	SendMessage(ctx context.Context, chatID int64, userID int64, senderUsername string, text string) error
-	GetMessages(ctx context.Context, userID, chatID int64, anchorTime time.Time, anchorID string, limit int64) ([]dom.Message, error)
+	GetMessages(ctx context.Context, userID, chatID int64, anchorTimeStr string, anchorID string, limit int64) ([]dom.Message, error)
 }
 
 type ChatService interface {
@@ -148,15 +141,6 @@ func (h *ChatHandler) OpenChatHandler(w http.ResponseWriter, r *http.Request) {
 
 	anchorID := r.URL.Query().Get("before_id")
 	beforeTimeStr := r.URL.Query().Get("before_time")
-	var beforeTime time.Time
-	if beforeTimeStr != "" {
-		beforeTime, err = time.Parse(time.RFC3339, beforeTimeStr)
-		if err != nil {
-			h.logger.Error("failed to parse before_time", slog.String("error", err.Error()))
-			http.Error(w, "Invalid before_time format", http.StatusBadRequest)
-			return
-		}
-	}
 
 	chat, err := h.ChatSrv.GetChatDetails(r.Context(), chatID, userID)
 	if err != nil {
@@ -165,7 +149,7 @@ func (h *ChatHandler) OpenChatHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	messages, err := h.MessSrv.GetMessages(r.Context(), userID, chatID, beforeTime, anchorID, limit)
+	messages, err := h.MessSrv.GetMessages(r.Context(), userID, chatID, beforeTimeStr, anchorID, limit)
 	if err != nil {
 		h.logger.Error("failed to get messages", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)

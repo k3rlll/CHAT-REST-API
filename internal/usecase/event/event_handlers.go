@@ -34,7 +34,7 @@ func NewEventHandlers(repo ChatUpdater, msg MongoMessage) *EventHandlers {
 }
 
 func (h *EventHandlers) HandleMessageDeleted(ctx context.Context, data []byte) error {
-	var evt events.EventMessageDeleted
+	var evt events.MessageDeleted
 
 	if err := json.Unmarshal(data, &evt); err != nil {
 		return fmt.Errorf("failed to marshal event: %w", err)
@@ -55,7 +55,7 @@ func (h *EventHandlers) HandleMessageDeleted(ctx context.Context, data []byte) e
 }
 
 func (h *EventHandlers) HandleMessageCreated(ctx context.Context, data []byte) error {
-	var evt events.EventMessageCreated
+	var evt events.MessageCreated
 	if err := json.Unmarshal(data, &evt); err != nil {
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}

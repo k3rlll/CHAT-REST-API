@@ -4,7 +4,7 @@ import (
 	"time"
 )
 
-type EventMessageCreated struct {
+type MessageCreated struct {
 	MessageID string    `json:"message_id"`
 	ChatID    int64     `json:"chat_id"`
 	SenderID  int64     `json:"sender_id"`
@@ -12,7 +12,7 @@ type EventMessageCreated struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-type EventMessageDeleted struct {
+type MessageDeleted struct {
 	MessageIDs []string `json:"message_ids"`
 	ChatID     int64    `json:"chat_id"`
 }

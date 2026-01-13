@@ -11,7 +11,6 @@ import (
 	service "main/internal/usecase/message"
 	mock "main/internal/usecase/message/mock"
 	"testing"
-	time "time"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
@@ -52,7 +51,7 @@ func TestSendMessage(t *testing.T) {
 					SaveMessage(gomock.Any(), gomock.AssignableToTypeOf(dom.Message{})).
 					Return("mongo_id_123", nil)
 				mockKafka.EXPECT().
-					SendMessageCreated(gomock.Any(), gomock.AssignableToTypeOf(events.EventMessageCreated{})).
+					SendMessageCreated(gomock.Any(), gomock.AssignableToTypeOf(events.MessageCreated{})).
 					Return(nil)
 			},
 			wantErr: nil,
@@ -85,7 +84,6 @@ func TestSendMessage(t *testing.T) {
 			setup: func() {
 				mockChat.EXPECT().CheckIsMemberOfChat(gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil)
 				mockMsgRepo.EXPECT().SaveMessage(gomock.Any(), gomock.Any()).Return("id123", nil)
-				// Кафка возвращает ошибку, но в коде мы её только логируем
 				mockKafka.EXPECT().SendMessageCreated(gomock.Any(), gomock.Any()).Return(errors.New("kafka connection error"))
 			},
 			wantErr: nil,
@@ -103,12 +101,13 @@ func TestSendMessage(t *testing.T) {
 				Logger: logger,
 			}
 
-			err := service.SendMessage(context.Background(), tt.chatID, tt.userID, tt.senderUsername, tt.text)
+			msg, err := service.SendMessage(context.Background(), tt.chatID, tt.userID, tt.senderUsername, tt.text)
 
 			if tt.wantErr != nil {
 				assert.ErrorIs(t, err, tt.wantErr)
 			} else {
 				assert.NoError(t, err)
+				assert.NotNil(t, msg)
 			}
 		})
 	}
@@ -358,7 +357,7 @@ func TestGetMessages(t *testing.T) {
 	mockChat := mock.NewMockChatInterface(ctrl)
 	mockMsgRepo := mock.NewMockMessageRepository(ctrl)
 
-	now := time.Now()
+	now := "2024-06-15T12:00:00Z"
 	anchorID := "651eb1234567890abcdef123"
 	limit := int64(20)
 	messages := []dom.Message{{Text: "old message"}, {Text: "new message"}}

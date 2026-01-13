@@ -3,10 +3,10 @@ package handlers
 import (
 	"log/slog"
 
-	auth "main/internal/transport/handlers/auth"
-	chat "main/internal/transport/handlers/chat"
-	message "main/internal/transport/handlers/message"
-	user "main/internal/transport/handlers/user"
+	auth "main/internal/delivery/http/auth"
+	chat "main/internal/delivery/http/chat"
+	message "main/internal/delivery/http/message"
+	user "main/internal/delivery/http/user"
 
 	"github.com/go-chi/chi"
 )

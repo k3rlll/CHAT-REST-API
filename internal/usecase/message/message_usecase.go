@@ -33,8 +33,8 @@ type MessageRepository interface {
 }
 
 type KafkaProducer interface {
-	SendMessageCreated(ctx context.Context, event events.EventMessageCreated) error
-	SendMessageDeleted(ctx context.Context, event events.EventMessageDeleted) error
+	SendMessageCreated(ctx context.Context, event events.MessageCreated) error
+	SendMessageDeleted(ctx context.Context, event events.MessageDeleted) error
 }
 
 type MessageService struct {
@@ -53,13 +53,17 @@ func NewMessageService(chat ChatInterface, msg MessageRepository, kafka KafkaPro
 	}
 }
 
-func (m *MessageService) SendMessage(ctx context.Context, chatID int64, userID int64, senderUsername string, text string) error {
+func (m *MessageService) SendMessage(ctx context.Context,
+	chatID int64,
+	userID int64,
+	senderUsername string,
+	text string) (*dom.Message, error) {
 	isMember, err := m.Chat.CheckIsMemberOfChat(ctx, chatID, userID)
 	if err != nil {
-		return customerrors.ErrDatabase
+		return nil, customerrors.ErrDatabase
 	}
 	if !isMember {
-		return customerrors.ErrUserNotMemberOfChat
+		return nil, customerrors.ErrUserNotMemberOfChat
 	}
 
 	msg := dom.Message{
@@ -72,10 +76,10 @@ func (m *MessageService) SendMessage(ctx context.Context, chatID int64, userID i
 
 	mongoID, err := m.Msg.SaveMessage(ctx, msg)
 	if err != nil {
-		return customerrors.ErrDatabase
+		return nil, customerrors.ErrDatabase
 	}
 
-	event := events.EventMessageCreated{
+	event := events.MessageCreated{
 		MessageID: mongoID,
 		ChatID:    chatID,
 		SenderID:  userID,
@@ -85,7 +89,7 @@ func (m *MessageService) SendMessage(ctx context.Context, chatID int64, userID i
 	if err := m.Kafka.SendMessageCreated(ctx, event); err != nil {
 		m.Logger.Warn("failed to publish event", "error", err)
 	}
-	return nil
+	return &msg, err
 }
 
 func (m *MessageService) DeleteMessage(ctx context.Context, senderID int64, chatID int64, msgID []string) error {
@@ -102,7 +106,7 @@ func (m *MessageService) DeleteMessage(ctx context.Context, senderID int64, chat
 		return customerrors.ErrUserNotMemberOfChat
 	}
 
-	events := events.EventMessageDeleted{
+	events := events.MessageDeleted{
 		MessageIDs: msgID,
 		ChatID:     chatID}
 
@@ -146,7 +150,7 @@ func (m *MessageService) EditMessage(ctx context.Context, senderID int64, chatID
 	return nil
 }
 
-func (m *MessageService) GetMessages(ctx context.Context, userID, chatID int64, anchorTime time.Time, anchorID string, limit int64) ([]dom.Message, error) {
+func (m *MessageService) GetMessages(ctx context.Context, userID, chatID int64, anchorTimeStr string, anchorID string, limit int64) ([]dom.Message, error) {
 
 	if userID <= 0 || chatID <= 0 || limit <= 0 {
 		return nil, customerrors.ErrInvalidInput
@@ -159,5 +163,14 @@ func (m *MessageService) GetMessages(ctx context.Context, userID, chatID int64, 
 	if !isMember {
 		return nil, customerrors.ErrUserNotMemberOfChat
 	}
+
+	var anchorTime time.Time
+	if anchorTimeStr != "" {
+		anchorTime, err = time.Parse(time.RFC3339, anchorTimeStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse anchor time: %w", customerrors.ErrInvalidInput)
+		}
+	}
+
 	return m.Msg.GetMessages(ctx, chatID, anchorTime, anchorID, limit)
 }

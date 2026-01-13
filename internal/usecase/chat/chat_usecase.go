@@ -124,7 +124,7 @@ func (c *ChatService) GetChatDetails(ctx context.Context, chatID int64, userID i
 func (c *ChatService) OpenChat(ctx context.Context,
 	chatID int64,
 	userID int64,
-	anchorTime time.Time, anchorID string, limit int64) (dom.Chat,
+	anchorTimeStr string, anchorID string, limit int64) (dom.Chat,
 	[]dom.Message,
 	error) {
 
@@ -155,6 +155,13 @@ func (c *ChatService) OpenChat(ctx context.Context,
 
 	details.MembersCount = len(details.MembersID)
 
+	var anchorTime time.Time
+	if anchorTimeStr != "" {
+		anchorTime, err = time.Parse(time.RFC3339, anchorTimeStr)
+		if err != nil {
+			return dom.Chat{}, nil, fmt.Errorf("failed to parse anchor time: %w", customerrors.ErrInvalidInput)
+		}
+	}
 	messages, err := c.Msg.GetMessages(ctx, chatID, anchorTime, anchorID, limit)
 	if err != nil {
 		return dom.Chat{}, nil, fmt.Errorf("chat service: failed to get messages: %w", err)

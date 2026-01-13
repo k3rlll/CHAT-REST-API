@@ -55,7 +55,7 @@ func (c *ConsumerCreated) StartConsumerCreated(ctx context.Context) error {
 }
 
 func (c *ConsumerCreated) processMessage(ctx context.Context, msg kafka.Message) error {
-	var EventMessageCreated events.EventMessageCreated
+	var EventMessageCreated events.MessageCreated
 
 	if err := json.Unmarshal(msg.Value, &EventMessageCreated); err != nil {
 		return fmt.Errorf("failed to unmarshal message: %w", err)

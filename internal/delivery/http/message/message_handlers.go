@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	mwMiddleware "main/internal/delivery/http/middleware_auth"
+	"main/internal/delivery/ws"
 	dom "main/internal/domain/entity"
-	mwMiddleware "main/internal/server/middleware"
-	"main/internal/transport/ws"
 	"net/http"
 	"strconv"
 	"time"
@@ -15,7 +15,7 @@ import (
 )
 
 type EditMessageDTO struct {
-	MessageID int64  `json:"message_id"`
+	MessageID string `json:"message_id"`
 	SenderID  int64  `json:"sender_id"`
 	ChatID    int64  `json:"chat_id"`
 	NewText   string `json:"new_text"`
@@ -28,10 +28,10 @@ type DeleteMessageDTO struct {
 }
 
 type MessageService interface {
-	SendMessage(ctx context.Context, chatID, senderID int64, senderUsername, text string) (dom.Message, error)
+	SendMessage(ctx context.Context, chatID, senderID int64, senderUsername, text string) (*dom.Message, error)
 	DeleteMessage(ctx context.Context, senderID int64, chatID int64, msgID []string) error
-	EditMessage(ctx context.Context, messageID int64, newText string) error
-	ListMessages(ctx context.Context, chatID int64, limit, lastMessage int) ([]dom.Message, error)
+	EditMessage(ctx context.Context, senderID int64, chatID int64, msgID string, newText string) error
+	GetMessages(ctx context.Context, userID, chatID int64, anchorTimeStr string, anchorID string, limit int64) ([]dom.Message, error)
 }
 type ChatService interface {
 	CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (dom.Chat, error)
@@ -207,7 +207,7 @@ func (h *MessageHandler) EditMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.MessSrv.EditMessage(r.Context(), request.MessageID, request.NewText); err != nil {
+	if err := h.MessSrv.EditMessage(r.Context(), request.SenderID, request.ChatID, request.MessageID, request.NewText); err != nil {
 		h.logger.Error("failed to edit message", slog.Any("error", err.Error()))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
@@ -236,24 +236,25 @@ func (h *MessageHandler) EditMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *MessageHandler) ListMessageHandlers(w http.ResponseWriter, r *http.Request) {
+	userID, err := mwMiddleware.GetUserIDFromContext(r.Context())
+	if err != nil {
+		h.logger.Error("failed to get user id from context", slog.Any("error", err.Error()))
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
 
 	chatIDStr := chi.URLParam(r, "id")
 	lastMsgStr := r.URL.Query().Get("last_message")
+	lastMsgID := r.URL.Query().Get("last_message_id")
 
-	strconvID, err := strconv.ParseInt(chatIDStr, 10, 64)
+	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
 	if err != nil {
 		h.logger.Error("failed to parse chat id", slog.Any("error", err.Error()))
 		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
-	lastMessage, err := strconv.Atoi(lastMsgStr)
-	if err != nil && lastMsgStr != "" {
-		h.logger.Error("failed to parse last message", slog.Any("error", err.Error()))
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
 
-	messages, err := h.MessSrv.ListMessages(r.Context(), strconvID, 50, lastMessage)
+	messages, err := h.MessSrv.GetMessages(r.Context(), userID, chatID, lastMsgStr, lastMsgID, 50)
 	if err != nil {
 		h.logger.Error("failed to list messages", slog.Any("error", err.Error()))
 		w.WriteHeader(http.StatusInternalServerError)

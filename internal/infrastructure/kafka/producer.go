@@ -1,65 +1,46 @@
+// internal/infrastructure/kafka/producer.go
 package kafka
 
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"main/internal/domain/events"
-	"time"
 
 	"github.com/segmentio/kafka-go"
 )
 
 type Producer struct {
-	writer *kafka.Writer
+	createdWriter *kafka.Writer
+	deletedWriter *kafka.Writer
 }
 
-func NewProducer(brokers []string, topic string) *Producer {
-	writer := &kafka.Writer{
-		Addr:     kafka.TCP(brokers...),
-		Topic:    topic,
-		Balancer: &kafka.LeastBytes{},
-	}
-
+func NewProducer(brokers []string) *Producer {
 	return &Producer{
-		writer: writer,
+		createdWriter: &kafka.Writer{
+			Addr:     kafka.TCP(brokers...),
+			Topic:    "msg_created", // Топик для созданий
+			Balancer: &kafka.LeastBytes{},
+		},
+		deletedWriter: &kafka.Writer{
+			Addr:     kafka.TCP(brokers...),
+			Topic:    "msg_deleted", // Топик для удалений
+			Balancer: &kafka.LeastBytes{},
+		},
 	}
+}
+
+func (p *Producer) SendMessageCreated(ctx context.Context, event events.MessageCreated) error {
+	payload, _ := json.Marshal(event)
+	return p.createdWriter.WriteMessages(ctx, kafka.Message{Value: payload})
+}
+
+func (p *Producer) SendMessageDeleted(ctx context.Context, event events.MessageDeleted) error {
+	payload, _ := json.Marshal(event)
+	return p.deletedWriter.WriteMessages(ctx, kafka.Message{Value: payload})
 }
 
 func (p *Producer) Close() error {
-	return p.writer.Close()
-}
-
-func (p *Producer) SendMessageCreated(ctx context.Context, event events.EventMessageCreated) error {
-	payload, err := json.Marshal(event)
-	if err != nil {
-		return fmt.Errorf("failed to marshal event : %w", err)
-	}
-
-	msg := kafka.Message{
-		Key:   []byte(fmt.Sprintf("%d", event.ChatID)),
-		Value: payload,
-		Time:  time.Now(),
-	}
-	if err := p.writer.WriteMessages(ctx, msg); err != nil {
-		return fmt.Errorf("failed to write message to kafka: %w", err)
-	}
-	return nil
-}
-
-func (p *Producer) SendMessageDeleted(ctx context.Context, event events.EventMessageDeleted) error {
-	payload, err := json.Marshal(event)
-	if err != nil {
-		return fmt.Errorf("failed to marshal event: %w", err)
-	}
-
-	delMsg := kafka.Message{
-		Key:   []byte(fmt.Sprintf("%d", event.ChatID)),
-		Value: payload,
-		Time:  time.Now(),
-	}
-	if err := p.writer.WriteMessages(ctx, delMsg); err != nil {
-		return fmt.Errorf("failed to write messages to kafka: %w", err)
-	}
+	p.createdWriter.Close()
+	p.deletedWriter.Close()
 	return nil
 }

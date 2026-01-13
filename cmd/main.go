@@ -18,15 +18,15 @@ import (
 	chat "main/internal/database/postgres/chat_repo"
 	user "main/internal/database/postgres/user_repo"
 	rdb "main/internal/database/redis"
+	httpHandler "main/internal/delivery/http"
+	AuthHandler "main/internal/delivery/http/auth"
+	ChatHandler "main/internal/delivery/http/chat"
+	MessageHandler "main/internal/delivery/http/message"
+	mwMiddleware "main/internal/delivery/http/middleware_auth"
+	UserHandler "main/internal/delivery/http/user"
+	"main/internal/delivery/ws"
 	kafka "main/internal/infrastructure/kafka"
 	claims "main/internal/pkg/jwt"
-	mwMiddleware "main/internal/server/middleware"
-	httpHandler "main/internal/transport/handlers"
-	AuthHandler "main/internal/transport/handlers/auth"
-	ChatHandler "main/internal/transport/handlers/chat"
-	MessageHandler "main/internal/transport/handlers/message"
-	UserHandler "main/internal/transport/handlers/user"
-	"main/internal/transport/ws"
 	srvAuth "main/internal/usecase/auth"
 	srvChat "main/internal/usecase/chat"
 	eventHandler "main/internal/usecase/event"
@@ -57,12 +57,6 @@ func main() {
 		logger.Error("failed to create JWT claims", slog.String("error", err.Error()))
 		return
 	}
-
-	deletedConsumerHandler := kafka.NewConsumer(
-		cfg.Kafka.Brokers,
-		"msg_deleted_topic",
-		"chat_group",
-	)
 
 	//--------------Databases Connections-----------------
 	postgres, err := psql.NewDBPool(cfg.DatabaseDSN())
@@ -104,10 +98,8 @@ func main() {
 
 	//-----------------------Kafka-------------------------------
 	event := eventHandler.NewEventHandlers(chatRepo, msgRepo)
-	deletedProducer := kafka.NewProducer(cfg.Kafka.Brokers, "msg_deleted_topic")
-	createdProducer := kafka.NewProducer(cfg.Kafka.Brokers, "msg_created_topic")
-	defer deletedProducer.Close()
-	defer createdProducer.Close()
+	producer := kafka.NewProducer(cfg.Kafka.Brokers)
+	defer producer.Close()
 	deletedConsumer := kafka.NewConsumer(
 		cfg.Kafka.Brokers,
 		"msg_deleted_topic",
@@ -133,7 +125,7 @@ func main() {
 	userService := srvUser.NewUserService(userRepo, logger)
 	authService := srvAuth.NewAuthService(authRepo, jwtService, NewCache)
 	chatService := srvChat.NewChatService(userRepo, chatRepo, logger)
-	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, logger)
+	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, producer, logger)
 
 	//-----------------------HTTP Server-------------------------------
 
