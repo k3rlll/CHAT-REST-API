@@ -9,6 +9,12 @@ import (
 	"github.com/ilyakaznacheev/cleanenv"
 )
 
+type Metrics struct {
+	Enabled bool   `yaml:"enabled" env:"METRICS_ENABLED" env-default:"true"`
+	Port    int    `yaml:"port" env:"METRICS_PORT" env-default:"9090"`
+	Host    string `yaml:"host" env:"METRICS_HOST" env-default:"localhost"`
+}
+
 type Server struct {
 	Port        int           `yaml:"port" env:"SERVER_PORT" env-default:"8082"`
 	Mode        string        `yaml:"mode" env:"SERVER_MODE" env-default:"debug"`
@@ -56,19 +62,28 @@ type Config struct {
 	MongoDB  MongoDB  `yaml:"mongodb"`
 	Redis    Redis    `yaml:"redis"`
 	Kafka    Kafka    `yaml:"kafka"`
+	Metrics  Metrics  `yaml:"metrics"`
 }
 
 type EnvConfig struct {
 	ConfigPath string `env:"CONFIG_PATH"`
-	secretKey  string `env:"MY_SECRET_KEY"`
+	SecretKey  string `env:"MY_SECRET_KEY"`
+}
+
+var configPathFlag string
+
+func init() {
+	flag.StringVar(&configPathFlag, "config", "", "Path to the config file")
 }
 
 func (e *EnvConfig) MySecretKey() string {
-	return e.secretKey
+	return e.SecretKey
 }
 
 func MySecretKey() string {
-	envConfig := &EnvConfig{}
+	envConfig := &EnvConfig{
+		SecretKey: "",
+	}
 	err := cleanenv.ReadEnv(envConfig)
 	if err != nil {
 		panic("cannot read env variables: " + err.Error())
@@ -81,7 +96,8 @@ func (c *Config) DatabaseDSN() string {
 		c.Postgres.User + ":" +
 		c.Postgres.Password + "@" +
 		c.Postgres.Host + ":" +
-		strconv.Itoa(c.Postgres.Port) + "/postgres?sslmode=disable"
+		strconv.Itoa(c.Postgres.Port) + "/" +
+		c.Postgres.DBName + "?sslmode=disable"
 }
 
 func (c *Config) MongoURI() string {
@@ -109,9 +125,11 @@ func MustLoadPath(configPath string) *Config {
 
 func fetchConfigPath() string {
 	var res string
+	if !flag.Parsed() {
+		flag.Parse()
+	}
 
-	flag.StringVar(&res, "config", "", "Path to the config file (e.g. configs/config.yaml)")
-	flag.Parse()
+	res = configPathFlag
 
 	if res == "" {
 		res = os.Getenv("CONFIG_PATH")

@@ -7,7 +7,7 @@ import (
 	dom "main/internal/domain/entity"
 	"strconv"
 
-	mwMiddleware "main/internal/delivery/http/middleware_auth"
+	mwMiddleware "main/internal/delivery/http/middleware/auth"
 	"main/internal/pkg/customerrors"
 	"net/http"
 

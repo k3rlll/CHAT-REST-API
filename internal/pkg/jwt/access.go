@@ -13,7 +13,7 @@ import (
 )
 
 type Claims struct {
-	mysecretkey string `env:"MYSECRETKEY"`
+	mysecretkey string `env:"MY_SECRET_KEY"`
 }
 
 func NewClaims(mysecretkey string) (*Claims, error) {

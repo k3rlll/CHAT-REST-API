@@ -2,14 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	config "main/internal/config"
 	"net"
 	"net/http"
 	"os"
-	"os/signal"
 	"strconv"
-	"syscall"
 	"time"
 
 	msg "main/internal/database/mongo"
@@ -22,7 +21,8 @@ import (
 	AuthHandler "main/internal/delivery/http/auth"
 	ChatHandler "main/internal/delivery/http/chat"
 	MessageHandler "main/internal/delivery/http/message"
-	mwMiddleware "main/internal/delivery/http/middleware_auth"
+	mwMiddleware "main/internal/delivery/http/middleware/auth"
+	"main/internal/delivery/http/middleware/metrics"
 	UserHandler "main/internal/delivery/http/user"
 	"main/internal/delivery/ws"
 	kafka "main/internal/infrastructure/kafka"
@@ -36,6 +36,9 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/cors"
+	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -45,6 +48,9 @@ const (
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		fmt.Println("No .env file found")
+	}
 	cfg := config.MustLoadConfig()
 	secretKey := config.MySecretKey()
 
@@ -52,6 +58,12 @@ func main() {
 	logger.Info("Starting application", slog.String("env", cfg.Env))
 	addr := net.JoinHostPort(cfg.Server.Host, strconv.Itoa(cfg.Server.Port))
 	router := chi.NewRouter()
+
+	//-----------------------Metrics Router---------------------------
+	metricsRouter := chi.NewRouter()
+	metricsRouter.Handle("/metrics", promhttp.Handler())
+
+	//-----------------------JWT Claims---------------------------
 	NewClaims, err := claims.NewClaims(secretKey)
 	if err != nil {
 		logger.Error("failed to create JWT claims", slog.String("error", err.Error()))
@@ -133,6 +145,7 @@ func main() {
 	logger.Info("Connected to database successfully")
 
 	router.Use(middleware.RequestID)
+	router.Use(metrics.PrometheusMiddleware)
 	router.Use(mwMiddleware.New(logger))
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
@@ -155,9 +168,6 @@ func main() {
 
 	HTTP.RegisterRoutes(router)
 
-	done := make(chan os.Signal, 1)
-	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
-
 	serverParams := &http.Server{
 		Addr:         addr,
 		Handler:      router,
@@ -165,24 +175,47 @@ func main() {
 		WriteTimeout: cfg.Server.Timeout,
 		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
-
-	go func() {
-		if err := serverParams.ListenAndServe(); err != nil {
-			logger.Error("HTTP server stopped", slog.String("error", err.Error()))
-		}
-	}()
-
-	logger.Info("HTTP server is started")
-
-	<-done
-	logger.Info("stopping server")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	if err := serverParams.Shutdown(ctx); err != nil {
-		logger.Error("server shutdown failed", slog.String("error", err.Error()))
+	metricsParams := &http.Server{
+		Addr:    net.JoinHostPort(cfg.Metrics.Host, strconv.Itoa(cfg.Metrics.Port)),
+		Handler: metricsRouter,
 	}
+
+	g, gCtx := errgroup.WithContext(context.Background())
+
+	g.Go(func() error {
+		logger.Info("Metrics server is starting", slog.String("addr", metricsParams.Addr))
+		if err := metricsParams.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			return err
+		}
+		return nil
+	})
+	g.Go(func() error {
+		logger.Info("HTTP server is starting", slog.String("addr", serverParams.Addr))
+		if err := serverParams.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			return err
+		}
+		return nil
+	})
+	g.Go(func() error {
+		<-gCtx.Done()
+		logger.Info("shutting down servers")
+
+		shutDownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := serverParams.Shutdown(shutDownCtx); err != nil {
+			logger.Error("HTTP server shutdown failed", slog.String("error", err.Error()))
+		}
+		if err := metricsParams.Shutdown(shutDownCtx); err != nil {
+			logger.Error("Metrics server shutdown failed", slog.String("error", err.Error()))
+		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
+		logger.Error("Application stopped with error", slog.Any("err", err))
+		os.Exit(1)
+	}
+	logger.Info("Application stopped gracefully")
 
 }
 
@@ -191,7 +224,7 @@ func setupLogger(env string) *slog.Logger {
 	switch env {
 	case envLocal, envDev:
 		log = slog.New(
-			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 	default:
 		log = slog.New(
 			slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))

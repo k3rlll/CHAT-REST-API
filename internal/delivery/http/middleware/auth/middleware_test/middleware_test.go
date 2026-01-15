@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	middleware "main/internal/delivery/http/middleware_auth"
+	middleware "main/internal/delivery/http/middleware/auth"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

@@ -48,7 +48,7 @@ func (s *UserService) RegisterUser(ctx context.Context, username, email, passwor
 
 	res, err := s.Repo.RegisterUser(ctx, username, email, passwordHash)
 	if err != nil {
-		return dom.User{}, customerrors.ErrDatabase
+		return dom.User{}, err
 	}
 
 	res = dom.User{

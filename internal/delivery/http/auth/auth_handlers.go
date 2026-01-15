@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	mwMiddleware "main/internal/delivery/http/middleware_auth"
+	mwMiddleware "main/internal/delivery/http/middleware/auth"
 	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
 	"net/http"

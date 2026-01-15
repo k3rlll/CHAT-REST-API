@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"main/internal/domain/events"
+	"main/internal/pkg/metrics"
 
 	"github.com/segmentio/kafka-go"
 )
@@ -55,6 +56,7 @@ func (c *ConsumerCreated) StartConsumerCreated(ctx context.Context) error {
 }
 
 func (c *ConsumerCreated) processMessage(ctx context.Context, msg kafka.Message) error {
+	metrics.MessagesProcessedTotal.Inc()
 	var EventMessageCreated events.MessageCreated
 
 	if err := json.Unmarshal(msg.Value, &EventMessageCreated); err != nil {

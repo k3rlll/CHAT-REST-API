@@ -69,7 +69,10 @@ func (s *AuthService) LoginUser(ctx context.Context, userID int64, password stri
 
 	user, err := s.Repo.GetPasswordHash(ctx, userID, password)
 	if err != nil {
-		return "", dom.RefreshToken{}, customerrors.ErrDatabase
+		return "", dom.RefreshToken{}, err
+	}
+	if user.Password == "" {
+		return "", dom.RefreshToken{}, customerrors.ErrUserNotFound
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
@@ -77,7 +80,9 @@ func (s *AuthService) LoginUser(ctx context.Context, userID int64, password stri
 	}
 	storedRefreshToken, err := s.Repo.GetRefreshToken(ctx, userID)
 	if err != nil {
-		return "", dom.RefreshToken{}, fmt.Errorf("failed to get refresh token: %w", err)
+		if !errors.Is(err, customerrors.ErrRefreshTokenNotFound) && !errors.Is(err, customerrors.ErrRefreshTokenExpired) {
+			return "", dom.RefreshToken{}, fmt.Errorf("failed to get refresh token: %w", err)
+		}
 	}
 
 	accessToken, err := s.jwt.NewAccessToken(userID, time.Minute*15)

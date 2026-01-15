@@ -75,17 +75,17 @@ func (t *AuthRepository) GetByEmail(ctx context.Context, email string) (dom.User
 }
 
 func (t *AuthRepository) GetPasswordHash(ctx context.Context,
-	userID int64,
+	usernane string,
 	password string) (dom.User, error) {
 	var passwordHash string
 
 	err := t.pool.QueryRow(ctx,
-		"SELECT password_hash FROM users WHERE id=$1", userID).Scan(&passwordHash)
+		"SELECT password_hash FROM users WHERE username=$1", usernane).Scan(&passwordHash)
 	if err != nil {
-		return dom.User{}, customerrors.ErrInvalidInput
+		return dom.User{}, err
 	}
 	var user dom.User
-	user.ID = userID
+	user.Username = usernane
 	user.Password = passwordHash
 
 	return user, nil

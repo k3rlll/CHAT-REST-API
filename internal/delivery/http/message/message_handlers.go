@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	mwMiddleware "main/internal/delivery/http/middleware_auth"
+	mwMiddleware "main/internal/delivery/http/middleware/auth"
 	"main/internal/delivery/ws"
 	dom "main/internal/domain/entity"
 	"net/http"

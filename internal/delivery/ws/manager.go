@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"sync"
 
+	"main/internal/pkg/metrics"
+
 	"github.com/gorilla/websocket"
 )
 
@@ -72,12 +74,14 @@ func (m *Manager) WsUnicast(userID int64, data interface{}) {
 }
 
 func (m *Manager) AddClient(userID int64, conn *websocket.Conn) {
+	metrics.ActiveWebSocketConnections.Inc()
 	m.mu.Lock()
 	m.clients[userID] = conn
 	m.mu.Unlock()
 }
 
 func (m *Manager) removeClient(userID int64) {
+	metrics.ActiveWebSocketConnections.Dec()
 	m.mu.Lock()
 	delete(m.clients, userID)
 	m.mu.Unlock()

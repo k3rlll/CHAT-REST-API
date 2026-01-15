@@ -18,12 +18,12 @@ func NewProducer(brokers []string) *Producer {
 	return &Producer{
 		createdWriter: &kafka.Writer{
 			Addr:     kafka.TCP(brokers...),
-			Topic:    "msg_created", // Топик для созданий
+			Topic:    "msg_created",
 			Balancer: &kafka.LeastBytes{},
 		},
 		deletedWriter: &kafka.Writer{
 			Addr:     kafka.TCP(brokers...),
-			Topic:    "msg_deleted", // Топик для удалений
+			Topic:    "msg_deleted", 
 			Balancer: &kafka.LeastBytes{},
 		},
 	}
