@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	dom "main/internal/domain/entity"
+	"net/http"
 	"strconv"
 
-	mwMiddleware "main/internal/delivery/http/middleware/auth"
-	"main/internal/pkg/customerrors"
-	"net/http"
-
 	"github.com/go-chi/chi"
+
+	mwMiddleware "main/internal/delivery/http/middleware/auth"
+	dom "main/internal/domain/entity"
+	"main/internal/pkg/customerrors"
+	"main/internal/pkg/jwt"
 )
 
 type ChatHandler struct {
@@ -35,7 +36,7 @@ type ChatService interface {
 
 type JWTManager interface {
 	Exists(context.Context, string) (bool, error)
-	Parse(string) (int64, error)
+	Parse(string) (*jwt.TokenClaims, error)
 }
 
 func NewChatHandler(
@@ -53,10 +54,9 @@ func NewChatHandler(
 	}
 }
 
-// all ways according to /chats
 func (h *ChatHandler) RegisterRoutes(r chi.Router) {
 	r.Group(func(r chi.Router) {
-		r.Use(mwMiddleware.JWTAuth(h.Manager))
+		r.Use(mwMiddleware.JWTAuth(h.Manager, h.Manager, h.logger))
 		r.Post("/", h.CreateChatHandler)
 		r.Get("/", h.GetChatsHandler)
 		r.Get("/{chat_id}", h.OpenChatHandler)
@@ -65,13 +65,7 @@ func (h *ChatHandler) RegisterRoutes(r chi.Router) {
 	})
 }
 
-/*pattern: /v1/chats
-method:  POST
-info:    Создать чат: direct (user_id) или group (title)
-*/
-
 func (h *ChatHandler) CreateChatHandler(w http.ResponseWriter, r *http.Request) {
-
 	var chat dom.Chat
 
 	if err := json.NewDecoder(r.Body).Decode(&chat); err != nil {
@@ -82,67 +76,82 @@ func (h *ChatHandler) CreateChatHandler(w http.ResponseWriter, r *http.Request) 
 
 	members := chat.MembersID
 	title := chat.Title
-	_, err := h.ChatSrv.CreateChat(r.Context(), title, chat.IsPrivate, members)
+
+	userID, ok := mwMiddleware.GetUserID(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	hasSelf := false
+	for _, m := range members {
+		if m == userID {
+			hasSelf = true
+			break
+		}
+	}
+	if !hasSelf {
+		members = append(members, userID)
+	}
+
+	createdChat, err := h.ChatSrv.CreateChat(r.Context(), title, chat.IsPrivate, members)
 	if err != nil {
 		h.logger.Error("failed to create chat", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(createdChat)
 }
 
-// pattern: /v1/chats
-// method:  GET
-// info:    Список чатов пользователя; параметры: cursor, limit, q
-
 func (h *ChatHandler) GetChatsHandler(w http.ResponseWriter, r *http.Request) {
+	userID, ok := mwMiddleware.GetUserID(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 
-	yuserIdStr := r.URL.Query().Get("user_id")
-	userId, err := strconv.ParseInt(yuserIdStr, 10, 64)
-
-	chats, err := h.ChatSrv.ListOfChats(r.Context(), userId)
+	chats, err := h.ChatSrv.ListOfChats(r.Context(), userID)
 	if err != nil {
 		h.logger.Error("failed to get list of chats", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	b, err := json.MarshalIndent(chats, "", "  ")
-	if err != nil {
-		h.logger.Error("failed to marshal response", slog.String("error", err.Error()))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
 
-	if _, err := w.Write(b); err != nil {
-		h.logger.Error("failed to write response", slog.String("error", err.Error()))
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(chats); err != nil {
+		h.logger.Error("failed to encode response", slog.String("error", err.Error()))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 }
 
-// pattern: /v1/chats/{id}/
-// method:  GET
-// info:    Детали чата (если участник)
-
 func (h *ChatHandler) OpenChatHandler(w http.ResponseWriter, r *http.Request) {
-
-	chatIDStr := chi.URLParam(r, "id")
-	userIDStr := r.URL.Query().Get("user_id")
-
-	userID, err := strconv.ParseInt(userIDStr, 10, 64)
+	chatIDStr := chi.URLParam(r, "chat_id")
 	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid chat id", http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := mwMiddleware.GetUserID(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
 
 	limitStr := r.URL.Query().Get("limit")
 	limit, err := strconv.ParseInt(limitStr, 10, 64)
-	if err != nil {
+	if err != nil || limit <= 0 {
 		limit = 50
 	}
 
 	anchorID := r.URL.Query().Get("before_id")
 	beforeTimeStr := r.URL.Query().Get("before_time")
 
-	chat, err := h.ChatSrv.GetChatDetails(r.Context(), chatID, userID)
+	chatDetails, err := h.ChatSrv.GetChatDetails(r.Context(), chatID, userID)
 	if err != nil {
 		h.logger.Error("failed to get chat details", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -156,99 +165,74 @@ func (h *ChatHandler) OpenChatHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	marshalDetails, err := json.MarshalIndent(chat, "", "  ")
-	if err != nil {
-		h.logger.Error("failed to marshal response", slog.String("error", err.Error()))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	marshalMessages, err := json.MarshalIndent(messages, "", "  ")
-	if err != nil {
-		h.logger.Error("failed to marshal response", slog.String("error", err.Error()))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
 	response := struct {
-		Chat     json.RawMessage `json:"chat"`
-		Messages json.RawMessage `json:"messages"`
+		Chat     dom.Chat      `json:"chat"`
+		Messages []dom.Message `json:"messages"`
 	}{
-		Chat:     marshalDetails,
-		Messages: marshalMessages,
+		Chat:     chatDetails,
+		Messages: messages,
 	}
 
-	b, err := json.MarshalIndent(response, "", "  ")
-	if err != nil {
-		h.logger.Error("failed to marshal response", slog.String("error", err.Error()))
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.Error("failed to encode response", slog.String("error", err.Error()))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
 	}
-
-	if _, err := w.Write(b); err != nil {
-		h.logger.Error("failed to write response", slog.String("error", err.Error()))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
 }
 
 func (h *ChatHandler) DeleteChatHandler(w http.ResponseWriter, r *http.Request) {
-
-	var chat_id int64
-
-	if err := json.NewDecoder(r.Body).Decode(&chat_id); err != nil {
-		h.logger.Error("failed to decode request", slog.String("error", err.Error()))
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	chatIDStr := chi.URLParam(r, "chat_id")
+	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid chat id", http.StatusBadRequest)
 		return
 	}
 
-	if err := h.ChatSrv.DeleteChat(r.Context(), chat_id); err != nil {
+	if err := h.ChatSrv.DeleteChat(r.Context(), chatID); err != nil {
 		h.logger.Error("failed to delete chat", slog.String("error", err.Error()))
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-
 }
 
-// pattern: /v1/chats/{chat_id}/members
-// method:  POST
-// info:    Add members to chat
-
 func (h *ChatHandler) AddMembersHandler(w http.ResponseWriter, r *http.Request) {
+	chatIDStr := chi.URLParam(r, "chat_id")
+	chatID, err := strconv.ParseInt(chatIDStr, 10, 64)
+	if err != nil {
+		http.Error(w, "invalid chat id", http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := mwMiddleware.GetUserID(r.Context())
+	if !ok {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var requestData struct {
-		ChatID  int64   `json:"chat_id"`
 		Members []int64 `json:"members"`
-		UserID  int64   `json:"user_id"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	chatID := requestData.ChatID
-	members := requestData.Members
-	userID := requestData.UserID
 
-	if err := h.ChatSrv.AddMembers(r.Context(), chatID, userID, members); err != nil {
+	if err := h.ChatSrv.AddMembers(r.Context(), chatID, userID, requestData.Members); err != nil {
 		h.logger.Error("failed to add members to chat", slog.String("error", err.Error()))
 		switch err {
 		case customerrors.ErrUserAlreadyInChat:
 			http.Error(w, "conflict", http.StatusConflict)
-			return
 		case customerrors.ErrInvalidInput:
 			http.Error(w, "not found", http.StatusNotFound)
-			return
 		case customerrors.ErrUserNotMemberOfChat:
 			http.Error(w, "no permission", http.StatusForbidden)
-			return
 		default:
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
 		}
+		return
 	}
 	w.WriteHeader(http.StatusCreated)
 }

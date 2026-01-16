@@ -5,48 +5,23 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 
-	"github.com/go-chi/chi/middleware"
+	"main/internal/pkg/jwt"
 )
 
-type JWTManager interface {
-	Parse(accessToken string) (int64, error)
-	Exists(ctx context.Context, token string) (bool, error)
+type ContextKey string
+
+const UserIDKey ContextKey = "user_id"
+
+type TokenParser interface {
+	Parse(accessToken string) (*jwt.TokenClaims, error)
 }
 
-func New(log *slog.Logger) func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		log = log.With(
-			slog.String("component", "middleware"),
-		)
-
-		log.Info("Middleware initialized")
-
-		fn := func(w http.ResponseWriter, r *http.Request) {
-			entry := log.With(
-				slog.String("remote_addr", r.RemoteAddr),
-				slog.String("request_id", middleware.GetReqID(r.Context())),
-				slog.String("path", r.URL.Path),
-				slog.String("method", r.Method))
-
-			ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-			t1 := time.Now()
-
-			defer func() {
-				entry.Info("request completed",
-					slog.Int("status", ww.Status()),
-					slog.Int("bytes_written", ww.BytesWritten()),
-					slog.String("duration", time.Since(t1).String()),
-				)
-			}()
-			next.ServeHTTP(ww, r)
-		}
-		return http.HandlerFunc(fn)
-	}
+type TokenBlacklistChecker interface {
+	Exists(ctx context.Context, key string) (bool, error)
 }
 
-func JWTAuth(manager JWTManager) func(http.Handler) http.Handler {
+func JWTAuth(parser TokenParser, blacklist TokenBlacklistChecker, log *slog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var tokenString string
@@ -64,7 +39,6 @@ func JWTAuth(manager JWTManager) func(http.Handler) http.Handler {
 					http.Error(w, "missing authorization header", http.StatusUnauthorized)
 					return
 				}
-
 				parts := strings.Split(authHeader, " ")
 				if len(parts) != 2 || parts[0] != "Bearer" {
 					http.Error(w, "invalid authorization header format", http.StatusUnauthorized)
@@ -73,8 +47,9 @@ func JWTAuth(manager JWTManager) func(http.Handler) http.Handler {
 				tokenString = parts[1]
 			}
 
-			isBanned, err := manager.Exists(r.Context(), tokenString)
+			isBanned, err := blacklist.Exists(r.Context(), tokenString)
 			if err != nil {
+				log.Error("failed to check blacklist", slog.String("error", err.Error()))
 				http.Error(w, "internal server error", http.StatusInternalServerError)
 				return
 			}
@@ -83,16 +58,20 @@ func JWTAuth(manager JWTManager) func(http.Handler) http.Handler {
 				return
 			}
 
-			userID, err := manager.Parse(tokenString)
+			claims, err := parser.Parse(tokenString)
 			if err != nil {
 				http.Error(w, "invalid token", http.StatusUnauthorized)
 				return
 			}
-
-			ctx := context.WithValue(r.Context(), "user_id", userID)
+			ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func GetUserID(ctx context.Context) (int64, bool) {
+	userID, ok := ctx.Value(UserIDKey).(int64)
+	return userID, ok
 }
 
 func isWebSocket(r *http.Request) bool {

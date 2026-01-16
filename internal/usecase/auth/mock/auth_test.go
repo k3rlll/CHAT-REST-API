@@ -1,260 +1,263 @@
-package mock
+package mock_test
 
 import (
-	context "context"
+	"context"
 	"fmt"
-	entity "main/internal/domain/entity"
+	dom "main/internal/domain/entity"
 	"main/internal/pkg/customerrors"
+	"main/internal/pkg/jwt"
 	"main/internal/usecase/auth"
+	mock "main/internal/usecase/auth/mock"
 	"testing"
+	"time"
 
-	gomock "go.uber.org/mock/gomock"
+	"github.com/stretchr/testify/assert"
+	"go.uber.org/mock/gomock"
 	"golang.org/x/crypto/bcrypt"
 )
 
-// TODO: recover tests after fixing the issues
-func TestLoginUsers(t *testing.T) {
+func TestLoginUser(t *testing.T) {
 	password := "securepassword"
+	wrongPassword := "wrongpassword"
 	accessToken := "right_access"
 	refreshToken := "right_refresh"
 	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(password), bcrypt.MinCost)
+	defaultTTL := 15 * time.Minute
+	userID := int64(1)
+
+	validUser := dom.User{
+		ID:       userID,
+		Username: "user",
+		Password: string(hashedPassword),
+	}
 
 	tests := []struct {
 		name               string
-		Behavior           func(*MockAuthRepository, *MockToken)
 		ctx                context.Context
-		userID             int64
 		username           string
 		password           string
-		hashedPassword     string
-		expectPassword     string
-		accessToken        string
-		refreshToken       string
+		setupMock          func(*mock.MockAuthRepository, *mock.MockTokenManager)
 		expectAccessToken  string
 		expectRefreshToken string
-		wantUser           entity.User
-		wantErr            bool
-		expectErr          error
+		expectError        error
 	}{
 		{
-			name:           "ok",
-			ctx:            context.Background(),
-			userID:         1,
-			password:       password,
-			hashedPassword: string(hashedPassword),
-			accessToken:    accessToken,
-			refreshToken:   refreshToken,
-			Behavior: func(repo *MockAuthRepository, token *MockToken) {
+			name:     "Success login",
+			ctx:      context.Background(),
+			username: "user",
+			password: password,
+			setupMock: func(repo *mock.MockAuthRepository, token *mock.MockTokenManager) {
 				gomock.InOrder(
 					repo.EXPECT().
-						GetPasswordHash(gomock.Any(), gomock.Any(), password).Return(entity.User{ID: 1, Password: string(hashedPassword)}, nil),
+						GetCredentialsByUsername(gomock.Any(), "user").
+						Return(validUser, nil),
 					token.EXPECT().
-						NewAccessToken(int64(1), gomock.Any()).Return(accessToken, nil),
+						NewRefreshToken().
+						Return(refreshToken, nil),
 					token.EXPECT().
-						NewRefreshToken().Return(refreshToken, nil),
+						NewAccessToken(userID, defaultTTL).
+						Return(accessToken, nil),
 					repo.EXPECT().
-						SaveRefreshToken(gomock.Any(), refreshToken).Return(nil),
+						SaveRefreshToken(gomock.Any(), gomock.Any()).
+						Return(nil),
 				)
 			},
-			wantUser:           entity.User{ID: 1, Username: "testuser"},
-			wantErr:            false,
-			expectErr:          nil,
-			expectPassword:     password,
 			expectAccessToken:  accessToken,
 			expectRefreshToken: refreshToken,
-		}, {
-			name:           "invalid password",
-			ctx:            context.Background(),
-			userID:         1,
-			password:       "wrongpassword",
-			hashedPassword: string(hashedPassword),
-			accessToken:    accessToken,
-			refreshToken:   refreshToken,
-			Behavior: func(repo *MockAuthRepository, token *MockToken) {
-				gomock.InOrder(
-					repo.EXPECT().
-						GetPasswordHash(gomock.Any(), int64(1), "wrongpassword").Return(entity.User{ID: 1, Password: string(hashedPassword)}, nil),
-				)
-			},
-			wantUser:           entity.User{},
-			wantErr:            true,
-			expectErr:          customerrors.ErrInvalidInput,
-			expectPassword:     "wrongpassword",
-			expectAccessToken:  "",
-			expectRefreshToken: "",
+			expectError:        nil,
 		},
 		{
-			name:           "repo error",
-			ctx:            context.Background(),
-			userID:         1,
-			password:       password,
-			hashedPassword: string(hashedPassword),
-			accessToken:    accessToken,
-			refreshToken:   refreshToken,
-			Behavior: func(repo *MockAuthRepository, token *MockToken) {
-				gomock.InOrder(
-					repo.EXPECT().
-						GetPasswordHash(gomock.Any(), int64(1), password).Return(entity.User{}, customerrors.ErrDatabase),
-				)
+			name:     "Invalid password",
+			ctx:      context.Background(),
+			username: "user",
+			password: wrongPassword,
+			setupMock: func(repo *mock.MockAuthRepository, token *mock.MockTokenManager) {
+				repo.EXPECT().
+					GetCredentialsByUsername(gomock.Any(), "user").
+					Return(validUser, nil)
 			},
-			wantUser:           entity.User{},
-			wantErr:            true,
-			expectErr:          customerrors.ErrDatabase,
-			expectPassword:     password,
 			expectAccessToken:  "",
 			expectRefreshToken: "",
+			expectError:        customerrors.ErrInvalidInput,
 		},
 		{
-			name:           "token creation error",
-			ctx:            context.Background(),
-			userID:         1,
-			password:       password,
-			hashedPassword: string(hashedPassword),
-			accessToken:    accessToken,
-			refreshToken:   refreshToken,
-			Behavior: func(repo *MockAuthRepository, token *MockToken) {
-				gomock.InOrder(
-					repo.EXPECT().
-						GetPasswordHash(gomock.Any(), int64(1), password).Return(entity.User{ID: 1, Password: string(hashedPassword)}, nil),
-					token.EXPECT().
-						NewAccessToken(int64(1), gomock.Any()).Return("", customerrors.ErrTokenCreationFailed),
-				)
+			name:     "User not found",
+			ctx:      context.Background(),
+			username: "ghost",
+			password: password,
+			setupMock: func(repo *mock.MockAuthRepository, token *mock.MockTokenManager) {
+				repo.EXPECT().
+					GetCredentialsByUsername(gomock.Any(), "ghost").
+					Return(dom.User{}, customerrors.ErrUserNotFound)
 			},
-			wantUser:           entity.User{},
-			wantErr:            true,
-			expectErr:          customerrors.ErrTokenCreationFailed,
-			expectPassword:     password,
 			expectAccessToken:  "",
 			expectRefreshToken: "",
+			expectError:        customerrors.ErrUserNotFound,
+		},
+		{
+			name:     "Database error",
+			ctx:      context.Background(),
+			username: "user",
+			password: password,
+			setupMock: func(repo *mock.MockAuthRepository, token *mock.MockTokenManager) {
+				repo.EXPECT().
+					GetCredentialsByUsername(gomock.Any(), "user").
+					Return(dom.User{}, customerrors.ErrDatabase)
+			},
+			expectAccessToken:  "",
+			expectRefreshToken: "",
+			expectError:        customerrors.ErrDatabase,
+		},
+		{
+			name:     "Token creation failed",
+			ctx:      context.Background(),
+			username: "user",
+			password: password,
+			setupMock: func(repo *mock.MockAuthRepository, token *mock.MockTokenManager) {
+				gomock.InOrder(
+					repo.EXPECT().GetCredentialsByUsername(gomock.Any(), "user").Return(validUser, nil),
+					token.EXPECT().NewRefreshToken().Return("", customerrors.ErrTokenCreationFailed),
+				)
+			},
+			expectAccessToken:  "",
+			expectRefreshToken: "",
+			expectError:        customerrors.ErrTokenCreationFailed,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			repo := NewMockAuthRepository(ctrl)
-			token := NewMockToken(ctrl)
+			defer ctrl.Finish()
 
-			if tt.Behavior != nil {
-				tt.Behavior(repo, token)
+			repo := mock.NewMockAuthRepository(ctrl)
+			token := mock.NewMockTokenManager(ctrl)
+
+			if tt.setupMock != nil {
+				tt.setupMock(repo, token)
 			}
-			s := auth.NewAuthService(repo, token, nil)
-			gotAccessToken, gotRefreshToken, err := s.LoginUser(tt.ctx, tt.userID, tt.password)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("LoginUser() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if err != nil && err != tt.expectErr {
-				t.Errorf("LoginUser() error = %v, expectErr %v", err, tt.expectErr)
-				return
-			}
-			if gotAccessToken != tt.expectAccessToken {
-				t.Errorf("LoginUser() gotAccessToken = %v, expectAccessToken %v", gotAccessToken, tt.expectAccessToken)
-			}
-			if gotRefreshToken.Token != tt.expectRefreshToken {
-				t.Errorf("LoginUser() gotRefreshToken = %v, expectRefreshToken %v", gotRefreshToken, tt.expectRefreshToken)
+
+			s := auth.NewAuthService(repo, token, nil, defaultTTL)
+			gotAccess, gotRefresh, err := s.LoginUser(tt.ctx, tt.username, tt.password)
+
+			if tt.expectError != nil {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectError.Error())
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectAccessToken, gotAccess)
+				assert.Equal(t, tt.expectRefreshToken, gotRefresh.Token)
 			}
 		})
 	}
 }
 
 func TestLogoutUser(t *testing.T) {
-	accessToken := "right_access"
+	accessToken := "valid_access_token"
+	refreshToken := "valid_refresh_token"
+	userID := int64(100)
+	expTime := time.Now().Add(10 * time.Minute)
+
 	tests := []struct {
 		name        string
-		Behavior    func(*MockAuthRepository, *MockSetInterface)
 		ctx         context.Context
-		userID      int64
-		accessToken string
-		wantErr     bool
-		expectErr   error
+		access      string
+		refresh     string
+		setupMock   func(*mock.MockAuthRepository, *mock.MockTokenManager, *mock.MockTokenBlacklister)
+		expectError error
 	}{
 		{
-			name:        "ok",
-			ctx:         context.Background(),
-			userID:      1,
-			accessToken: accessToken,
-			Behavior: func(repo *MockAuthRepository, redis *MockSetInterface) {
+			name:    "Success logout",
+			ctx:     context.Background(),
+			access:  accessToken,
+			refresh: refreshToken,
+			setupMock: func(repo *mock.MockAuthRepository, token *mock.MockTokenManager, blacklist *mock.MockTokenBlacklister) {
 				gomock.InOrder(
-					redis.EXPECT().
-						Set(gomock.Any(), accessToken, "blacklist", 60*15).Return(nil),
+					token.EXPECT().
+						Parse(accessToken).
+						Return(&jwt.TokenClaims{UserID: userID, Exp: expTime.Unix()}, nil),
+					blacklist.EXPECT().
+						Set(gomock.Any(), accessToken, "blacklisted", gomock.Any()).
+						Return(nil),
 					repo.EXPECT().
-						DeleteRefreshToken(gomock.Any(), int64(1)).Return(nil),
+						DeleteRefreshToken(gomock.Any(), userID).
+						Return(nil),
 				)
 			},
-			wantErr:   false,
-			expectErr: nil,
+			expectError: nil,
 		},
 		{
-			name:        "redis set error",
-			ctx:         context.Background(),
-			userID:      1,
-			accessToken: accessToken,
-			Behavior: func(repo *MockAuthRepository, redis *MockSetInterface) {
+			name:    "Invalid access token",
+			ctx:     context.Background(),
+			access:  "invalid",
+			refresh: refreshToken,
+			setupMock: func(repo *mock.MockAuthRepository, token *mock.MockTokenManager, blacklist *mock.MockTokenBlacklister) {
+				token.EXPECT().
+					Parse("invalid").
+					Return(nil, fmt.Errorf("invalid token"))
+			},
+			expectError: fmt.Errorf("invalid token"),
+		},
+		{
+			name:    "Redis error",
+			ctx:     context.Background(),
+			access:  accessToken,
+			refresh: refreshToken,
+			setupMock: func(repo *mock.MockAuthRepository, token *mock.MockTokenManager, blacklist *mock.MockTokenBlacklister) {
 				gomock.InOrder(
-					redis.EXPECT().
-						Set(gomock.Any(), accessToken, "blacklist", 60*15).Return(customerrors.ErrDatabase),
+					token.EXPECT().
+						Parse(accessToken).
+						Return(&jwt.TokenClaims{UserID: userID, Exp: expTime.Unix()}, nil),
+					blacklist.EXPECT().
+						Set(gomock.Any(), accessToken, "blacklisted", gomock.Any()).
+						Return(customerrors.ErrDatabase),
 				)
 			},
-			wantErr:   true,
-			expectErr: fmt.Errorf("failed to blacklist access token: %w", customerrors.ErrDatabase),
+			expectError: customerrors.ErrDatabase,
 		},
 		{
-			name:        "repo delete error",
-			ctx:         context.Background(),
-			userID:      1,
-			accessToken: accessToken,
-			Behavior: func(repo *MockAuthRepository, redis *MockSetInterface) {
+			name:    "DB error",
+			ctx:     context.Background(),
+			access:  accessToken,
+			refresh: refreshToken,
+			setupMock: func(repo *mock.MockAuthRepository, token *mock.MockTokenManager, blacklist *mock.MockTokenBlacklister) {
 				gomock.InOrder(
-					redis.EXPECT().
-						Set(gomock.Any(), accessToken, "blacklist", 60*15).Return(nil),
+					token.EXPECT().
+						Parse(accessToken).
+						Return(&jwt.TokenClaims{UserID: userID, Exp: expTime.Unix()}, nil),
+					blacklist.EXPECT().
+						Set(gomock.Any(), accessToken, "blacklisted", gomock.Any()).
+						Return(nil),
 					repo.EXPECT().
-						DeleteRefreshToken(gomock.Any(), int64(1)).Return(customerrors.ErrDatabase),
+						DeleteRefreshToken(gomock.Any(), userID).
+						Return(customerrors.ErrDatabase),
 				)
 			},
-			wantErr:   true,
-			expectErr: fmt.Errorf("failed to delete refresh token: %w", customerrors.ErrDatabase),
-		},
-		{
-			name:        "invalid userID",
-			ctx:         context.Background(),
-			userID:      -1,
-			accessToken: accessToken,
-			Behavior: func(repo *MockAuthRepository, redis *MockSetInterface) {
-
-			},
-			wantErr:   true,
-			expectErr: fmt.Errorf("invalid userID"),
-		},
-		{
-			name:        "empty access token",
-			ctx:         context.Background(),
-			userID:      1,
-			accessToken: "",
-			Behavior: func(repo *MockAuthRepository, redis *MockSetInterface) {
-			},
-			wantErr:   true,
-			expectErr: fmt.Errorf("access token is empty"),
+			expectError: customerrors.ErrDatabase,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			repo := NewMockAuthRepository(ctrl)
-			redis := NewMockSetInterface(ctrl)
-			if tt.Behavior != nil {
-				tt.Behavior(repo, redis)
-			}
-			s := auth.NewAuthService(repo, nil, redis)
-			err := s.LogoutUser(tt.ctx, tt.userID, tt.accessToken)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("LogoutUser() error = %v, wantErr %v", err, tt.wantErr)
-				return
+			defer ctrl.Finish()
+
+			repo := mock.NewMockAuthRepository(ctrl)
+			token := mock.NewMockTokenManager(ctrl)
+			blacklist := mock.NewMockTokenBlacklister(ctrl)
+
+			if tt.setupMock != nil {
+				tt.setupMock(repo, token, blacklist)
 			}
 
-			if err != nil && err.Error() != tt.expectErr.Error() {
-				t.Errorf("LogoutUser() error = %v, expectErr %v", err, tt.expectErr)
-				return
+			s := auth.NewAuthService(repo, token, blacklist, 15*time.Minute)
+			err := s.LogoutUser(tt.ctx, tt.access, tt.refresh)
+
+			if tt.expectError != nil {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectError.Error())
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}

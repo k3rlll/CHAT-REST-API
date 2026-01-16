@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	mwMiddleware "main/internal/delivery/http/middleware/auth"
-	dom "main/internal/domain/entity"
-	"main/internal/pkg/customerrors"
 	"net/http"
 
 	"github.com/go-chi/chi"
+
+	mwMiddleware "main/internal/delivery/http/middleware/auth"
+	dom "main/internal/domain/entity"
+	"main/internal/pkg/customerrors"
+	"main/internal/pkg/jwt"
 )
 
 type UserService interface {
@@ -20,12 +22,11 @@ type UserService interface {
 
 type JWTManager interface {
 	Exists(context.Context, string) (bool, error)
-	Parse(string) (int64, error)
+	Parse(string) (*jwt.TokenClaims, error)
 }
 
 type UserHandler struct {
-	UserSrv UserService
-
+	UserSrv      UserService
 	tokenManager JWTManager
 	logger       *slog.Logger
 }
@@ -51,7 +52,7 @@ func (h *UserHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/registration", h.RegisterHandler)
 
 	r.Group(func(r chi.Router) {
-		r.Use(mwMiddleware.JWTAuth(h.tokenManager))
+		r.Use(mwMiddleware.JWTAuth(h.tokenManager, h.tokenManager, h.logger))
 		r.Get("/search", h.usersSearch)
 	})
 }
@@ -70,6 +71,7 @@ func (h *UserHandler) usersSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	b, err := json.MarshalIndent(users, "", "  ")
 	if err != nil {
 		h.logger.Error("failed to marshal response", slog.String("error", err.Error()))
@@ -79,10 +81,8 @@ func (h *UserHandler) usersSearch(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write(b); err != nil {
 		h.logger.Error("failed to write response", slog.String("error", err.Error()))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-
 }
 
 func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
@@ -97,8 +97,10 @@ func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	createdUser, err := h.UserSrv.RegisterUser(r.Context(), u.Username, u.Email, u.Password)
 	if err != nil {
 		if errors.Is(err, customerrors.ErrInvalidInput) {
-			http.Error(w, "Password does not meet complexity requirements", http.StatusUnprocessableEntity)
-			h.logger.Info("invalid password during registration")
+			http.Error(w, "Password or input invalid", http.StatusUnprocessableEntity)
+			h.logger.Info("invalid input during registration")
+		} else if errors.Is(err, customerrors.ErrUsernameAlreadyExists) || errors.Is(err, customerrors.ErrEmailAlreadyExists) {
+			http.Error(w, err.Error(), http.StatusConflict)
 		} else {
 			h.logger.Error("failed to register user", slog.String("error", err.Error()))
 			http.Error(w, "Internal server error", http.StatusInternalServerError)
@@ -106,6 +108,7 @@ func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	b, err := json.MarshalIndent(createdUser, "", "  ")
 	if err != nil {
 		h.logger.Error("failed to marshal response", slog.String("error", err.Error()))
@@ -115,8 +118,6 @@ func (h *UserHandler) RegisterHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 	if _, err := w.Write(b); err != nil {
 		h.logger.Error("failed to write response", slog.String("error", err.Error()))
-		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
-
 }

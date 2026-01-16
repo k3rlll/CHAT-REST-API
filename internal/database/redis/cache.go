@@ -18,8 +18,8 @@ func NewCache(client *redis.Client) *Cache {
 	}
 }
 
-func (c *Cache) Set(ctx context.Context, key string, value interface{}, ttlSeconds int) error {
-	err := c.Client.Set(ctx, key, value, time.Duration(ttlSeconds)*time.Second).Err()
+func (c *Cache) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	err := c.Client.Set(ctx, key, value, ttl).Err()
 	if err != nil {
 		return fmt.Errorf("failed to set in redis: %w", err)
 	}
@@ -30,7 +30,7 @@ func (c *Cache) Get(ctx context.Context, key string) ([]byte, error) {
 	val, err := c.Client.Get(ctx, key).Bytes()
 	if err != nil {
 		if err == redis.Nil {
-			return nil, nil // Key does not exist
+			return nil, nil
 		}
 		return nil, fmt.Errorf("failed to get from redis: %w", err)
 	}
@@ -45,10 +45,7 @@ func (c *Cache) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-func (c *Cache) Exists(ctx context.Context, token string) (bool, error) {
-
-	key := fmt.Sprintf("blacklist:%s", token)
-
+func (c *Cache) Exists(ctx context.Context, key string) (bool, error) {
 	result, err := c.Client.Exists(ctx, key).Result()
 	if err != nil {
 		return false, fmt.Errorf("failed to check existence in redis: %w", err)

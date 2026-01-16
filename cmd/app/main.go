@@ -21,7 +21,6 @@ import (
 	AuthHandler "main/internal/delivery/http/auth"
 	ChatHandler "main/internal/delivery/http/chat"
 	MessageHandler "main/internal/delivery/http/message"
-	mwMiddleware "main/internal/delivery/http/middleware/auth"
 	"main/internal/delivery/http/middleware/metrics"
 	UserHandler "main/internal/delivery/http/user"
 	"main/internal/delivery/ws"
@@ -47,6 +46,11 @@ const (
 	envDev   = "dev"
 )
 
+type CombinedTokenManager struct {
+	*claims.Manager
+	*rdb.Cache
+}
+
 func main() {
 	if err := godotenv.Load(); err != nil {
 		fmt.Println("No .env file found")
@@ -64,9 +68,9 @@ func main() {
 	metricsRouter.Handle("/metrics", promhttp.Handler())
 
 	//-----------------------JWT Claims---------------------------
-	NewClaims, err := claims.NewClaims(secretKey)
+	jwtManager, err := claims.NewManager(secretKey)
 	if err != nil {
-		logger.Error("failed to create JWT claims", slog.String("error", err.Error()))
+		logger.Error("failed to create JWT manager", slog.String("error", err.Error()))
 		return
 	}
 
@@ -105,8 +109,11 @@ func main() {
 	userRepo := user.NewUserRepository(postgres)
 	chatRepo := chat.NewChatRepository(postgres, logger)
 	msgRepo := msg.NewMessageRepository(mongoClient, logger)
-	jwtService := srvAuth.NewTokenService()
-	NewJWTFacade := srvAuth.NewJWTFacade(NewClaims, NewCache)
+
+	tokenController := &CombinedTokenManager{
+		Manager: jwtManager,
+		Cache:   NewCache,
+	}
 
 	//-----------------------Kafka-------------------------------
 	event := eventHandler.NewEventHandlers(chatRepo, msgRepo)
@@ -135,7 +142,7 @@ func main() {
 
 	//-----------------------Services-------------------------------
 	userService := srvUser.NewUserService(userRepo, logger)
-	authService := srvAuth.NewAuthService(authRepo, jwtService, NewCache)
+	authService := srvAuth.NewAuthService(authRepo, jwtManager, NewCache, 15*time.Minute)
 	chatService := srvChat.NewChatService(userRepo, chatRepo, logger)
 	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, producer, logger)
 
@@ -146,7 +153,6 @@ func main() {
 
 	router.Use(middleware.RequestID)
 	router.Use(metrics.PrometheusMiddleware)
-	router.Use(mwMiddleware.New(logger))
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
 	router.Use(cors.Handler(cors.Options{
@@ -159,10 +165,10 @@ func main() {
 	}))
 
 	//-----------------------Handlers-------------------------------
-	userHandler := UserHandler.NewUserHandler(userService, NewJWTFacade, logger)
-	authHandler := AuthHandler.NewAuthHandler(authService, NewJWTFacade, logger)
-	chatHandler := ChatHandler.NewChatHandler(messageService, chatService, logger, NewJWTFacade)
-	messageHandler := MessageHandler.NewMessageHandler(messageService, chatService, logger, wsManager, NewJWTFacade)
+	userHandler := UserHandler.NewUserHandler(userService, tokenController, logger)
+	authHandler := AuthHandler.NewAuthHandler(authService, tokenController, logger)
+	chatHandler := ChatHandler.NewChatHandler(messageService, chatService, logger, tokenController)
+	messageHandler := MessageHandler.NewMessageHandler(messageService, chatService, logger, wsManager, tokenController)
 
 	HTTP := httpHandler.NewHTTPHandler(userHandler, authHandler, chatHandler, messageHandler, logger)
 

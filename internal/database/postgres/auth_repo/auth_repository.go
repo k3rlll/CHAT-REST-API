@@ -2,12 +2,15 @@ package auth_repo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
-	dom "main/internal/domain/entity"
-	"main/internal/pkg/customerrors"
 	"time"
 
+	dom "main/internal/domain/entity"
+	"main/internal/pkg/customerrors"
+
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -23,76 +26,62 @@ func NewAuthRepository(pool *pgxpool.Pool, logger *slog.Logger) *AuthRepository 
 	}
 }
 
-func (t *AuthRepository) SaveRefreshToken(ctx context.Context, refreshToken dom.RefreshToken) error {
+func (r *AuthRepository) GetCredentialsByUsername(ctx context.Context, username string) (dom.User, error) {
+	var user dom.User
 
-	_, err := t.pool.Exec(ctx, `
-        INSERT INTO refresh_tokens (user_id, refresh_token, created_at, expires_at)
-        VALUES ($1, $2, $3, $4)`,
-		refreshToken.UserID, refreshToken.Token, refreshToken.CreatedAt, refreshToken.ExpiresAt)
+	query := "SELECT id, password_hash FROM users WHERE username=$1"
+
+	err := r.pool.QueryRow(ctx, query, username).Scan(&user.ID, &user.Password)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return dom.User{}, customerrors.ErrUserNotFound
+		}
+		return dom.User{}, fmt.Errorf("repo: get credentials: %w", err)
+	}
+
+	user.Username = username
+	return user, nil
+}
+
+func (r *AuthRepository) SaveRefreshToken(ctx context.Context, rt dom.RefreshToken) error {
+	_, err := r.pool.Exec(ctx, `
+		INSERT INTO refresh_tokens (user_id, refresh_token, created_at, expires_at)
+		VALUES ($1, $2, $3, $4)`,
+		rt.UserID, rt.Token, rt.CreatedAt, rt.ExpiresAt)
 
 	if err != nil {
-		return customerrors.ErrDatabase
+		return fmt.Errorf("repo: save refresh token: %w", customerrors.ErrDatabase)
 	}
 	return nil
 }
 
-func (t *AuthRepository) GetRefreshToken(ctx context.Context, userId int64) (string, error) {
+func (r *AuthRepository) GetRefreshToken(ctx context.Context, userID int64) (string, error) {
 	var storedToken string
 	var expiry time.Time
-	err := t.pool.QueryRow(ctx,
-		"SELECT refresh_token, expires_at from refresh_tokens WHERE user_id=$1", userId).
+
+	err := r.pool.QueryRow(ctx,
+		"SELECT refresh_token, expires_at FROM refresh_tokens WHERE user_id=$1", userID).
 		Scan(&storedToken, &expiry)
+
 	if err != nil {
-		return "", fmt.Errorf("get refresh token:%w", customerrors.ErrRefreshTokenNotFound)
-	}
-	if storedToken == "" {
-		return "", fmt.Errorf("repository:refresh token not found: %w", customerrors.ErrRefreshTokenNotFound)
-	}
-	if time.Now().After(expiry) {
-		if err := t.DeleteRefreshToken(ctx, userId); err != nil {
-			return "", fmt.Errorf("repository:delete expired refresh token: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", customerrors.ErrRefreshTokenNotFound
 		}
-		return "", fmt.Errorf("repository:refresh token expired: %w", customerrors.ErrRefreshTokenExpired)
+		return "", fmt.Errorf("repo: get refresh token: %w", err)
+	}
+
+	if time.Now().After(expiry) {
+		_ = r.DeleteRefreshToken(ctx, userID)
+		return "", customerrors.ErrRefreshTokenExpired
 	}
 
 	return storedToken, nil
 }
 
-func (t *AuthRepository) GetByEmail(ctx context.Context, email string) (dom.User, error) {
-	var user dom.User
-
-	err := t.pool.QueryRow(ctx,
-		"SELECT id, username, password_hash FROM users WHERE email=$1", email).
-		Scan(&user.ID, &user.Username, &user.Password)
-	if user.ID == 0 {
-		return dom.User{}, customerrors.ErrUserNotFound
-	}
+func (r *AuthRepository) DeleteRefreshToken(ctx context.Context, userID int64) error {
+	_, err := r.pool.Exec(ctx, "DELETE FROM refresh_tokens WHERE user_id=$1", userID)
 	if err != nil {
-		return dom.User{}, customerrors.ErrDatabase
+		return fmt.Errorf("repo: delete refresh token: %w", err)
 	}
-
-	return user, nil
-}
-
-func (t *AuthRepository) GetPasswordHash(ctx context.Context,
-	usernane string,
-	password string) (dom.User, error) {
-	var passwordHash string
-
-	err := t.pool.QueryRow(ctx,
-		"SELECT password_hash FROM users WHERE username=$1", usernane).Scan(&passwordHash)
-	if err != nil {
-		return dom.User{}, err
-	}
-	var user dom.User
-	user.Username = usernane
-	user.Password = passwordHash
-
-	return user, nil
-}
-
-func (t *AuthRepository) DeleteRefreshToken(ctx context.Context, userID int64) error {
-	_, err := t.pool.Exec(ctx,
-		"DELETE FROM refresh_tokens WHERE user_id=$1", userID)
-	return err
+	return nil
 }

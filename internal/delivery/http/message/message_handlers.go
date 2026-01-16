@@ -4,14 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	mwMiddleware "main/internal/delivery/http/middleware/auth"
-	"main/internal/delivery/ws"
-	dom "main/internal/domain/entity"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/go-chi/chi"
+
+	mwMiddleware "main/internal/delivery/http/middleware/auth"
+	"main/internal/delivery/ws"
+	dom "main/internal/domain/entity"
+	"main/internal/pkg/jwt"
 )
 
 type EditMessageDTO struct {
@@ -33,6 +35,7 @@ type MessageService interface {
 	EditMessage(ctx context.Context, senderID int64, chatID int64, msgID string, newText string) error
 	GetMessages(ctx context.Context, userID, chatID int64, anchorTimeStr string, anchorID string, limit int64) ([]dom.Message, error)
 }
+
 type ChatService interface {
 	CreateChat(ctx context.Context, title string, isPrivate bool, members []int64) (dom.Chat, error)
 	AddMembers(ctx context.Context, chatID, userID int64, members []int64) error
@@ -42,7 +45,7 @@ type ChatService interface {
 
 type JWTManager interface {
 	Exists(context.Context, string) (bool, error)
-	Parse(string) (int64, error)
+	Parse(string) (*jwt.TokenClaims, error)
 }
 
 type MessageHandler struct {
@@ -71,9 +74,9 @@ func NewMessageHandler(
 
 // /chats/{id}/messages
 func (h *MessageHandler) RegisterRoutes(r chi.Router) {
-
 	r.Group(func(r chi.Router) {
-		r.Use(mwMiddleware.JWTAuth(h.Manager))
+		r.Use(mwMiddleware.JWTAuth(h.Manager, h.Manager, h.logger))
+
 		r.Post("/", h.SendMessage)
 		r.Delete("/{msg_id}", h.DeleteMessageHandler)
 		r.Get("/", h.ListMessageHandlers)
@@ -90,19 +93,16 @@ func (h *MessageHandler) ConnectWebSocket(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	userID, err := h.Manager.Parse(tokenString)
+	claims, err := h.Manager.Parse(tokenString)
 	if err != nil {
 		h.logger.Error("ws auth failed", "error", err)
 		http.Error(w, "invalid token", http.StatusUnauthorized)
 		return
 	}
 
-	h.upgrader.HandleConnection(w, r, userID)
+	h.upgrader.HandleConnection(w, r, claims.UserID)
 }
 
-// pattern: /v1/chats/id/messages
-// method:  POST
-// info:    Отправить сообщение в чат
 func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 	var request dom.Message
 
@@ -146,16 +146,12 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 
 	}(context.Background(), request.ChatID, request.SenderID)
 
-	w.WriteHeader(http.StatusOK)
 	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(message)
 }
 
-// pattern: /v1/chats/id/messages/{msg_id}
-// method:  DELETE
-// info:    Delete message by ID
 func (h *MessageHandler) DeleteMessageHandler(w http.ResponseWriter, r *http.Request) {
-
 	var request DeleteMessageDTO
 
 	dec := json.NewDecoder(r.Body)
@@ -193,10 +189,8 @@ func (h *MessageHandler) DeleteMessageHandler(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusOK)
 }
 
-// pattern: /v1/chats/id/messages/{msg_id}
-// method:  PUT
-// info:    Edit message by ID
 func (h *MessageHandler) EditMessage(w http.ResponseWriter, r *http.Request) {
+
 	var request EditMessageDTO
 
 	dec := json.NewDecoder(r.Body)
@@ -232,13 +226,12 @@ func (h *MessageHandler) EditMessage(w http.ResponseWriter, r *http.Request) {
 			h.upgrader.WsUnicast(memberID, wsPayload)
 		}
 	}(context.Background(), request.ChatID, request.SenderID)
-
 }
 
 func (h *MessageHandler) ListMessageHandlers(w http.ResponseWriter, r *http.Request) {
-	userID, err := mwMiddleware.GetUserIDFromContext(r.Context())
-	if err != nil {
-		h.logger.Error("failed to get user id from context", slog.Any("error", err.Error()))
+	userID, ok := mwMiddleware.GetUserID(r.Context())
+	if !ok {
+		h.logger.Error("failed to get user id from context")
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
@@ -267,5 +260,4 @@ func (h *MessageHandler) ListMessageHandlers(w http.ResponseWriter, r *http.Requ
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.WriteHeader(http.StatusOK)
 }

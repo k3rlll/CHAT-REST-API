@@ -9,8 +9,71 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/assert"
 )
+
+func truncateTables(ctx context.Context, t *testing.T, pool *pgxpool.Pool, tables ...string) {
+	for _, table := range tables {
+		_, err := pool.Exec(ctx, "TRUNCATE TABLE "+table+" CASCADE")
+		if err != nil {
+			t.Fatalf("failed to truncate table %s: %v", table, err)
+		}
+	}
+}
+
+func TestGetCredentialsByUsername(t *testing.T) {
+	pool, teardown := dbtest.SetupTestDB(t)
+	defer teardown()
+
+	repo := auth.NewAuthRepository(pool, nil)
+	ctx := context.Background()
+
+	_, err := pool.Exec(ctx, "INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, $4)",
+		1, "testuser", "test@example.com", "hash123")
+	assert.NoError(t, err)
+
+	tests := []struct {
+		name          string
+		username      string
+		expectedID    int64
+		expectedPass  string
+		expectError   bool
+		expectedError error
+	}{
+		{
+			name:          "Valid user",
+			username:      "testuser",
+			expectedID:    1,
+			expectedPass:  "hash123",
+			expectError:   false,
+			expectedError: nil,
+		},
+		{
+			name:          "User not found",
+			username:      "ghost",
+			expectedID:    0,
+			expectedPass:  "",
+			expectError:   true,
+			expectedError: customerrors.ErrUserNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			user, err := repo.GetCredentialsByUsername(ctx, tt.username)
+
+			if tt.expectError {
+				assert.ErrorIs(t, err, tt.expectedError)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedID, user.ID)
+				assert.Equal(t, tt.expectedPass, user.Password)
+				assert.Equal(t, tt.username, user.Username)
+			}
+		})
+	}
+}
 
 func TestSaveRefreshToken(t *testing.T) {
 	pool, teardown := dbtest.SetupTestDB(t)
@@ -19,60 +82,58 @@ func TestSaveRefreshToken(t *testing.T) {
 	repo := auth.NewAuthRepository(pool, nil)
 	ctx := context.Background()
 
-	_, err := pool.Exec(ctx, "INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, $4)", 1, "testuser", "testuser@example.com", "hashedpassword")
-	if err != nil {
-		t.Fatalf("failed to insert test user: %v", err)
-	}
-
-	testToken := dom.RefreshToken{
-		UserID:    1,
-		Token:     "sample_refresh_token",
-		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(24 * time.Hour),
-	}
+	_, err := pool.Exec(ctx, "INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, $4)",
+		1, "testuser", "testuser@example.com", "hashedpassword")
+	assert.NoError(t, err)
 
 	tests := []struct {
 		name          string
-		testToken     dom.RefreshToken
+		token         dom.RefreshToken
 		expectError   bool
 		expectedError error
 	}{
 		{
-			name:          "Save valid refresh token",
-			testToken:     testToken,
+			name: "Save valid token",
+			token: dom.RefreshToken{
+				UserID:    1,
+				Token:     "refresh_token_123",
+				CreatedAt: time.Now(),
+				ExpiresAt: time.Now().Add(24 * time.Hour),
+			},
 			expectError:   false,
 			expectedError: nil,
 		},
 		{
-			name: "Save refresh token with missing user ID",
-			testToken: dom.RefreshToken{
-				UserID: 0,
+			name: "Foreign key violation",
+			token: dom.RefreshToken{
+				UserID:    999,
+				Token:     "bad_token",
+				CreatedAt: time.Now(),
+				ExpiresAt: time.Now().Add(24 * time.Hour),
 			},
 			expectError:   true,
 			expectedError: customerrors.ErrDatabase,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := pool.Exec(ctx, "TRUNCATE refresh_tokens")
-			if err != nil {
-				t.Fatalf("failed to truncate table: %v", err)
-			}
-			err = repo.SaveRefreshToken(ctx, tt.testToken)
+			truncateTables(ctx, t, pool, "refresh_tokens")
+
+			err := repo.SaveRefreshToken(ctx, tt.token)
 
 			if tt.expectError {
-				assert.Equal(t, tt.expectedError, err)
+				assert.ErrorIs(t, err, tt.expectedError)
 			} else {
 				assert.NoError(t, err)
 
 				var savedToken string
-				err = pool.QueryRow(ctx, "SELECT refresh_token FROM refresh_tokens WHERE user_id=$1", tt.testToken.UserID).Scan(&savedToken)
+				err = pool.QueryRow(ctx, "SELECT refresh_token FROM refresh_tokens WHERE user_id=$1", tt.token.UserID).Scan(&savedToken)
 				assert.NoError(t, err)
-				assert.Equal(t, tt.testToken.Token, savedToken)
+				assert.Equal(t, tt.token.Token, savedToken)
 			}
 		})
 	}
-
 }
 
 func TestGetRefreshToken(t *testing.T) {
@@ -82,70 +143,66 @@ func TestGetRefreshToken(t *testing.T) {
 	repo := auth.NewAuthRepository(pool, nil)
 	ctx := context.Background()
 
-	_, err := pool.Exec(ctx,
-		"INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, $4)", 1, "testuser", "testuser@example.com", "hashedpassword")
-	if err != nil {
-		t.Fatalf("failed to insert test user: %v", err)
-	}
-	_, err = pool.Exec(ctx,
-		"INSERT INTO refresh_tokens (user_id, refresh_token, created_at, expires_at) VALUES ($1, $2, $3, $4)",
-		1, "valid_token", time.Now(), time.Now().Add(24*time.Hour))
-	if err != nil {
-		t.Fatalf("failed to insert refresh token: %v", err)
-	}
 	tests := []struct {
 		name          string
+		setup         func()
 		userID        int64
 		expectedToken string
 		expectError   bool
 		expectedError error
 	}{
 		{
-			name:          "Get valid refresh token",
+			name: "Get valid token",
+			setup: func() {
+				_, _ = pool.Exec(ctx, "INSERT INTO users (id, username, email, password_hash) VALUES (1, 'u1', 'e1', 'p1')")
+				_, _ = pool.Exec(ctx, "INSERT INTO refresh_tokens (user_id, refresh_token, created_at, expires_at) VALUES (1, 'valid_token', NOW(), NOW() + INTERVAL '1 day')")
+			},
 			userID:        1,
 			expectedToken: "valid_token",
 			expectError:   false,
 			expectedError: nil,
 		},
 		{
-			name:          "Get non-existent refresh token",
-			userID:        1,
+			name: "Token not found",
+			setup: func() {
+				_, _ = pool.Exec(ctx, "INSERT INTO users (id, username, email, password_hash) VALUES (2, 'u2', 'e2', 'p2')")
+			},
+			userID:        2,
 			expectedToken: "",
 			expectError:   true,
 			expectedError: customerrors.ErrRefreshTokenNotFound,
 		},
 		{
-			name:          "Get expired refresh token",
-			userID:        1,
+			name: "Token expired",
+			setup: func() {
+				_, _ = pool.Exec(ctx, "INSERT INTO users (id, username, email, password_hash) VALUES (3, 'u3', 'e3', 'p3')")
+				_, _ = pool.Exec(ctx, "INSERT INTO refresh_tokens (user_id, refresh_token, created_at, expires_at) VALUES (3, 'expired_token', NOW() - INTERVAL '2 days', NOW() - INTERVAL '1 day')")
+			},
+			userID:        3,
 			expectedToken: "",
 			expectError:   true,
 			expectedError: customerrors.ErrRefreshTokenExpired,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := pool.Exec(ctx, "TRUNCATE refresh_tokens")
-			if err != nil {
-				t.Fatalf("failed to truncate table: %v", err)
+			truncateTables(ctx, t, pool, "users", "refresh_tokens")
+
+			if tt.setup != nil {
+				tt.setup()
 			}
-			if tt.name == "Get expired refresh token" {
-				_, err = pool.Exec(ctx,
-					"INSERT INTO refresh_tokens (user_id, refresh_token, created_at, expires_at) VALUES ($1, $2, $3, $4)",
-					tt.userID, "expired_token", time.Now().Add(-48*time.Hour), time.Now().Add(-24*time.Hour))
-			} else if tt.name == "Get non-existent refresh token" {
-				// Do not insert any token
-			} else {
-				_, err = pool.Exec(ctx,
-					"INSERT INTO refresh_tokens (user_id, refresh_token, created_at, expires_at) VALUES ($1, $2, $3, $4)",
-					tt.userID, tt.expectedToken, time.Now(), time.Now().Add(24*time.Hour))
-			}
-			if err != nil {
-				t.Fatalf("failed to setup test data: %v", err)
-			}
+
 			token, err := repo.GetRefreshToken(ctx, tt.userID)
 
 			if tt.expectError {
 				assert.ErrorIs(t, err, tt.expectedError)
+				if tt.expectedError == customerrors.ErrRefreshTokenExpired {
+					var count int
+					err := pool.QueryRow(ctx, "SELECT count(*) FROM refresh_tokens WHERE user_id=$1", tt.userID).Scan(&count)
+					assert.NoError(t, err)
+					assert.Equal(t, 0, count)
+				}
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedToken, token)
@@ -154,56 +211,23 @@ func TestGetRefreshToken(t *testing.T) {
 	}
 }
 
-func TestGetByEmail(t *testing.T) {
+func TestDeleteRefreshToken(t *testing.T) {
 	pool, teardown := dbtest.SetupTestDB(t)
 	defer teardown()
 
 	repo := auth.NewAuthRepository(pool, nil)
 	ctx := context.Background()
 
-	_, err := pool.Exec(ctx,
-		"INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, $4)", 1, "testuser", "testuser@example.com", "hashedpassword")
-	if err != nil {
-		t.Fatalf("failed to insert test user: %v", err)
-	}
+	_, err := pool.Exec(ctx, "INSERT INTO users (id, username, email, password_hash) VALUES (1, 'u1', 'e1', 'p1')")
+	assert.NoError(t, err)
+	_, err = pool.Exec(ctx, "INSERT INTO refresh_tokens (user_id, refresh_token, created_at, expires_at) VALUES (1, 'del_token', NOW(), NOW() + INTERVAL '1 day')")
+	assert.NoError(t, err)
 
-	expectedUser := dom.User{
-		ID:       1,
-		Username: "testuser",
-		Password: "hashedpassword",
-	}
+	err = repo.DeleteRefreshToken(ctx, 1)
+	assert.NoError(t, err)
 
-	tests := []struct {
-		name          string
-		email         string
-		expectedUser  dom.User
-		expectError   bool
-		expectedError error
-	}{
-		{
-			name:          "Get user by valid email",
-			email:         "testuser@example.com",
-			expectedUser:  expectedUser,
-			expectError:   false,
-			expectedError: nil,
-		},
-		{
-			name:          "Get user by non-existent email",
-			email:         "wrongemail@example.com",
-			expectedUser:  dom.User{},
-			expectError:   true,
-			expectedError: customerrors.ErrUserNotFound,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			user, err := repo.GetByEmail(ctx, tt.email)
-			if tt.expectError {
-				assert.ErrorIs(t, err, tt.expectedError)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tt.expectedUser, user)
-			}
-		})
-	}
+	var count int
+	err = pool.QueryRow(ctx, "SELECT count(*) FROM refresh_tokens WHERE user_id=$1", 1).Scan(&count)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, count)
 }

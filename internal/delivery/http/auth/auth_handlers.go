@@ -5,14 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
-	mwMiddleware "main/internal/delivery/http/middleware/auth"
-	dom "main/internal/domain/entity"
-	"main/internal/pkg/customerrors"
 	"net/http"
-	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi"
+
+	mwMiddleware "main/internal/delivery/http/middleware/auth"
+	dom "main/internal/domain/entity"
+	"main/internal/pkg/customerrors"
+	"main/internal/pkg/jwt"
 )
 
 type AuthHandler struct {
@@ -21,19 +23,18 @@ type AuthHandler struct {
 	Manager JWTManager
 }
 
-//go:generate go run github.com/vektra/mockery/v2@v2.32.4 --name=AuthService
 type AuthService interface {
-	LoginUser(ctx context.Context, userID int64, password string) (accessToken string, refreshToken dom.RefreshToken, err error)
-	LogoutUser(ctx context.Context, userID int64, refreshToken string) error
+	LoginUser(ctx context.Context, username string, password string) (accessToken string, refreshToken dom.RefreshToken, err error)
+	LogoutUser(ctx context.Context, accessToken, refreshToken string) error
 }
 
 type JWTManager interface {
 	Exists(context.Context, string) (bool, error)
-	Parse(string) (int64, error)
+	Parse(string) (*jwt.TokenClaims, error)
 }
 
 type loginDTO struct {
-	ID       int64  `json:"user_id"`
+	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
@@ -52,7 +53,7 @@ func (h *AuthHandler) RegisterRoutes(r chi.Router) {
 	r.Post("/login", h.LoginHandler)
 
 	r.Group(func(r chi.Router) {
-		r.Use(mwMiddleware.JWTAuth(h.Manager))
+		r.Use(mwMiddleware.JWTAuth(h.Manager, h.Manager, h.logger))
 		r.Post("/logout", h.LogoutHandler)
 	})
 }
@@ -66,11 +67,11 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	AccessToken, RefreshToken, err := h.AuthSrv.LoginUser(r.Context(), u.ID, u.Password)
+	AccessToken, RefreshToken, err := h.AuthSrv.LoginUser(r.Context(), u.Username, u.Password)
 	if err != nil {
 		if errors.Is(err, customerrors.ErrInvalidInput) {
 			http.Error(w, "Invalid username or password", http.StatusUnauthorized)
-			h.logger.Info("invalid login attempt", slog.String("user_id", strconv.FormatInt(u.ID, 10)))
+			h.logger.Info("invalid login attempt", slog.String("username", u.Username))
 			return
 		}
 		h.logger.Error("failed to login user", slog.String("error", err.Error()))
@@ -83,7 +84,7 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 		Expires:  time.Now().Add(time.Hour * 24 * 15),
 		Value:    RefreshToken.Token,
 		HttpOnly: true,
-		Path:     "/auth",
+		Path:     "/",
 		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 	})
@@ -91,29 +92,44 @@ func (h *AuthHandler) LoginHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Authorization", "Bearer "+AccessToken)
 
-	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{
+		"access_token": AccessToken,
+	})
 }
 
 func (h *AuthHandler) LogoutHandler(w http.ResponseWriter, r *http.Request) {
-
-	var user int64
-
-	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
-		h.logger.Error("failed to decode request", slog.String("error", err.Error()))
-		http.Error(w, "Invalid request payload", http.StatusBadRequest)
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		http.Error(w, "missing authorization header", http.StatusUnauthorized)
 		return
 	}
+	headerParts := strings.Split(authHeader, " ")
+	if len(headerParts) != 2 || headerParts[0] != "Bearer" {
+		http.Error(w, "invalid auth header", http.StatusUnauthorized)
+		return
+	}
+	accessToken := headerParts[1]
 
-	c, err := r.Cookie("refresh_token")
+	cookie, err := r.Cookie("refresh_token")
 	if err != nil {
-		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		http.Error(w, "refresh token cookie missing", http.StatusBadRequest)
 		return
 	}
-	tokenString := c.Value
+	refreshToken := cookie.Value
 
-	if err := h.AuthSrv.LogoutUser(r.Context(), user, tokenString); err != nil {
+	if err := h.AuthSrv.LogoutUser(r.Context(), accessToken, refreshToken); err != nil {
 		h.logger.Error("failed to logout user", slog.String("error", err.Error()))
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "refresh_token",
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+	})
+
+	w.WriteHeader(http.StatusOK)
 }

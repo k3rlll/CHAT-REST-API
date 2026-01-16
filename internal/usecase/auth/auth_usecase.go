@@ -2,141 +2,105 @@ package auth
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	rdb "main/internal/database/redis"
-	dom "main/internal/domain/entity"
-	customerrors "main/internal/pkg/customerrors"
-	jwt "main/internal/pkg/jwt"
 	"time"
+
+	dom "main/internal/domain/entity"
+	"main/internal/pkg/customerrors"
+	"main/internal/pkg/jwt"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
-var (
-	ErrAlreadyLoggedIn = errors.New("user already logged in")
-)
-
-type JWTFacade struct {
-	Parser    *jwt.Claims
-	redisRepo *rdb.Cache
-}
-
-type AuthService struct {
-	redis SetInterface
-	jwt   Token
-	Repo  AuthRepository
-}
-
-//go:generate mockgen -source=auth_service.go -destination=./mock/auth_mocks.go -package=mock
+//go:generate mockgen -source=auth_usecase.go -destination=./mock/auth_usecase_mock.go -package=mock
 type AuthRepository interface {
-	GetPasswordHash(ctx context.Context, userID int64, password string) (dom.User, error)
+	GetCredentialsByUsername(ctx context.Context, username string) (dom.User, error)
 	SaveRefreshToken(ctx context.Context, refreshToken dom.RefreshToken) error
 	GetRefreshToken(ctx context.Context, userID int64) (string, error)
 	DeleteRefreshToken(ctx context.Context, userID int64) error
 }
 
-type SetInterface interface {
-	Set(ctx context.Context, key string, value interface{}, ttlSeconds int) error
-}
-
-type Token interface {
+type TokenManager interface {
 	NewAccessToken(userID int64, ttl time.Duration) (string, error)
 	NewRefreshToken() (string, error)
-	Parse(accessToken string) (int64, error)
+	Parse(accessToken string) (*jwt.TokenClaims, error)
 }
 
-func NewTokenService() Token {
-	return &jwt.Claims{}
+type TokenBlacklister interface {
+	Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error
 }
 
-func NewAuthService(repo AuthRepository, jwt Token, redis SetInterface) *AuthService {
+type AuthService struct {
+	repo      AuthRepository
+	tokenMgr  TokenManager
+	blacklist TokenBlacklister
+	tokenTTL  time.Duration
+}
+
+func NewAuthService(repo AuthRepository, tokenMgr TokenManager, blacklist TokenBlacklister, tokenTTL time.Duration) *AuthService {
 	return &AuthService{
-		redis: redis,
-		jwt:   jwt,
-		Repo:  repo,
+		repo:      repo,
+		tokenMgr:  tokenMgr,
+		blacklist: blacklist,
+		tokenTTL:  tokenTTL,
 	}
 }
 
-func NewJWTFacade(parser *jwt.Claims, redisRepo *rdb.Cache) *JWTFacade {
-	return &JWTFacade{
-		Parser:    parser,
-		redisRepo: redisRepo,
-	}
-}
+// Обновленный метод LoginUser
+func (s *AuthService) LoginUser(ctx context.Context, username, password string) (string, dom.RefreshToken, error) {
 
-func (s *AuthService) LoginUser(ctx context.Context, userID int64, password string) (string, dom.RefreshToken, error) {
-
-	user, err := s.Repo.GetPasswordHash(ctx, userID, password)
+	user, err := s.repo.GetCredentialsByUsername(ctx, username)
 	if err != nil {
 		return "", dom.RefreshToken{}, err
-	}
-	if user.Password == "" {
-		return "", dom.RefreshToken{}, customerrors.ErrUserNotFound
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+
 		return "", dom.RefreshToken{}, customerrors.ErrInvalidInput
 	}
-	storedRefreshToken, err := s.Repo.GetRefreshToken(ctx, userID)
+
+	refreshTokenString, err := s.tokenMgr.NewRefreshToken()
 	if err != nil {
-		if !errors.Is(err, customerrors.ErrRefreshTokenNotFound) && !errors.Is(err, customerrors.ErrRefreshTokenExpired) {
-			return "", dom.RefreshToken{}, fmt.Errorf("failed to get refresh token: %w", err)
-		}
+		return "", dom.RefreshToken{}, fmt.Errorf("service: generate refresh: %w", err)
 	}
 
-	accessToken, err := s.jwt.NewAccessToken(userID, time.Minute*15)
+	accessTokenString, err := s.tokenMgr.NewAccessToken(user.ID, s.tokenTTL)
 	if err != nil {
-		return "", dom.RefreshToken{}, err
+		return "", dom.RefreshToken{}, fmt.Errorf("service: generate access: %w", err)
 	}
-	if storedRefreshToken != "" {
-		storedRefreshToken, err = s.jwt.NewRefreshToken()
-		if err != nil {
-			return "", dom.RefreshToken{}, err
-		}
-	}
-	res := dom.RefreshToken{
-		UserID:    userID,
-		Token:     storedRefreshToken,
+
+	refreshToken := dom.RefreshToken{
+		UserID:    user.ID,
+		Token:     refreshTokenString,
 		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add((24 * time.Hour) * 15),
+		ExpiresAt: time.Now().Add(24 * time.Hour * 15),
 	}
 
-	err = s.Repo.SaveRefreshToken(ctx, res)
-	if err != nil {
+	if err := s.repo.SaveRefreshToken(ctx, refreshToken); err != nil {
 		return "", dom.RefreshToken{}, err
 	}
 
-	return accessToken, res, nil
+	return accessTokenString, refreshToken, nil
 }
 
-func (s *AuthService) LogoutUser(ctx context.Context, userID int64, accessToken string) error {
-
-	if userID == 0 || userID < 0 {
-		return fmt.Errorf("invalid userID")
-	}
-
-	if accessToken == "" {
-		return fmt.Errorf("access token is empty")
-	}
-
-	err := s.redis.Set(ctx, accessToken, "blacklist", 60*15)
+func (s *AuthService) LogoutUser(ctx context.Context, accessToken, refreshToken string) error {
+	claims, err := s.tokenMgr.Parse(accessToken)
 	if err != nil {
-		return fmt.Errorf("failed to blacklist access token: %w", err)
+		return fmt.Errorf("invalid access token: %w", err)
 	}
 
-	err = s.Repo.DeleteRefreshToken(ctx, userID)
-	if err != nil {
-		return fmt.Errorf("failed to delete refresh token: %w", err)
+	expirationTime := time.Unix(claims.Exp, 0)
+	ttl := time.Until(expirationTime)
+
+	if ttl > 0 {
+		if err := s.blacklist.Set(ctx, accessToken, "blacklisted", ttl); err != nil {
+			return fmt.Errorf("redis blacklist error: %w", err)
+		}
+	}
+
+	if err := s.repo.DeleteRefreshToken(ctx, claims.UserID); err != nil {
+		return fmt.Errorf("db error: %w", err)
 	}
 
 	return nil
-}
-
-func (j *JWTFacade) Parse(accessToken string) (int64, error) {
-	return j.Parser.Parse(accessToken)
-}
-
-func (j *JWTFacade) Exists(ctx context.Context, token string) (bool, error) {
-	return j.redisRepo.Exists(ctx, token)
 }

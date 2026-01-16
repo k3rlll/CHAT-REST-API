@@ -3,11 +3,14 @@ package middleware_test
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	middleware "main/internal/delivery/http/middleware/auth"
+	"main/internal/pkg/jwt"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -17,30 +20,26 @@ type MockJWTManager struct {
 	mock.Mock
 }
 
-func (m *MockJWTManager) Parse(accessToken string) (int64, error) {
+func (m *MockJWTManager) Parse(accessToken string) (*jwt.TokenClaims, error) {
 	args := m.Called(accessToken)
 	if args.Get(0) == nil {
-		return 0, args.Error(1)
+		return nil, args.Error(1)
 	}
-	return args.Get(0).(int64), nil
+	return args.Get(0).(*jwt.TokenClaims), args.Error(1)
 }
 
 func (m *MockJWTManager) Exists(ctx context.Context, token string) (bool, error) {
-
 	args := m.Called(ctx, token)
-	if args.Get(0) == nil {
-		return false, args.Error(1)
-	}
-
-	return true, nil
+	return args.Bool(0), args.Error(1)
 }
 
 func TestJWTAuth(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+
 	tests := []struct {
 		name           string
 		headerName     string
 		headerValue    string
-		tokenString    string
 		mockBehavior   func(m *MockJWTManager)
 		expectedCode   int
 		expectedUserID int64
@@ -49,10 +48,9 @@ func TestJWTAuth(t *testing.T) {
 			name:        "Success (Valid Token)",
 			headerName:  "Authorization",
 			headerValue: "Bearer valid_token",
-			tokenString: "valid_token",
 			mockBehavior: func(m *MockJWTManager) {
 				m.On("Exists", mock.Anything, "valid_token").Return(false, nil)
-				m.On("Parse", "valid_token").Return(int64(10), nil)
+				m.On("Parse", "valid_token").Return(&jwt.TokenClaims{UserID: 10, Exp: 1234567890}, nil)
 			},
 			expectedCode:   200,
 			expectedUserID: 10,
@@ -75,36 +73,44 @@ func TestJWTAuth(t *testing.T) {
 			name:        "Token Revoked (Banned)",
 			headerName:  "Authorization",
 			headerValue: "Bearer banned_token",
-			tokenString: "banned_token",
 			mockBehavior: func(m *MockJWTManager) {
 				m.On("Exists", mock.Anything, "banned_token").Return(true, nil)
 			},
 			expectedCode: 401,
 		},
 		{
+			name:        "Redis Error",
+			headerName:  "Authorization",
+			headerValue: "Bearer valid_token",
+			mockBehavior: func(m *MockJWTManager) {
+				m.On("Exists", mock.Anything, "valid_token").Return(false, errors.New("redis error"))
+			},
+			expectedCode: 500,
+		},
+		{
 			name:        "Invalid Token Signature (Parse Error)",
 			headerName:  "Authorization",
 			headerValue: "Bearer bad_sign_token",
-			tokenString: "bad_sign_token",
 			mockBehavior: func(m *MockJWTManager) {
 				m.On("Exists", mock.Anything, "bad_sign_token").Return(false, nil)
-				m.On("Parse", "bad_sign_token").Return(int64(0), errors.New("invalid signature"))
+				m.On("Parse", "bad_sign_token").Return(nil, errors.New("invalid signature"))
 			},
 			expectedCode: 401,
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockManager := new(MockJWTManager)
 			tt.mockBehavior(mockManager)
 
-			middleware := middleware.JWTAuth(mockManager)
+			mw := middleware.JWTAuth(mockManager, mockManager, logger)
 
 			nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-
 				if tt.expectedUserID != 0 {
-					userID := r.Context().Value("userID")
-					assert.Equal(t, tt.expectedUserID, userID, "UserID not found in context")
+					userID, ok := middleware.GetUserID(r.Context())
+					assert.True(t, ok)
+					assert.Equal(t, tt.expectedUserID, userID)
 				}
 				w.WriteHeader(http.StatusOK)
 			})
@@ -115,7 +121,7 @@ func TestJWTAuth(t *testing.T) {
 			}
 			w := httptest.NewRecorder()
 
-			middleware(nextHandler).ServeHTTP(w, req)
+			mw(nextHandler).ServeHTTP(w, req)
 
 			assert.Equal(t, tt.expectedCode, w.Code)
 
