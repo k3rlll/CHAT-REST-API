@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"main/internal/domain/events"
-	"main/internal/pkg/metrics"
+	"main/pkg/metrics"
 
 	"github.com/segmentio/kafka-go"
 )

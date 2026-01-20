@@ -55,6 +55,10 @@ type Redis struct {
 	MinIdleConns int           `yaml:"min_idle_conns" env:"REDIS_MIN_IDLE_CONNS" env-default:"2"`
 }
 
+type Auth struct {
+	TokenTTL time.Duration `yaml:"token_ttl" env:"AUTH_TOKEN_TTL" env-default:"15m"`
+}
+
 type Config struct {
 	Env      string   `yaml:"env" env:"ENV" env-default:"development"`
 	Server   Server   `yaml:"server"`
@@ -63,6 +67,7 @@ type Config struct {
 	Redis    Redis    `yaml:"redis"`
 	Kafka    Kafka    `yaml:"kafka"`
 	Metrics  Metrics  `yaml:"metrics"`
+	Auth     Auth     `yaml:"auth"`
 }
 
 type EnvConfig struct {

@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	dom "main/internal/domain/entity"
 	"main/internal/domain/events"
-	"main/internal/pkg/customerrors"
+	"main/pkg/customerrors"
 	"time"
 )
 

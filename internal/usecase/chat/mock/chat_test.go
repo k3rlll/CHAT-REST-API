@@ -5,9 +5,9 @@ import (
 	"fmt"
 	dom "main/internal/domain/entity"
 	entity "main/internal/domain/entity"
-	"main/internal/pkg/customerrors"
 	service "main/internal/usecase/chat"
 	"main/internal/usecase/chat/mock"
+	"main/pkg/customerrors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

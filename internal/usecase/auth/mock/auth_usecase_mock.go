@@ -12,7 +12,7 @@ package mock
 import (
 	context "context"
 	entity "main/internal/domain/entity"
-	jwt "main/internal/pkg/jwt"
+	jwt "main/pkg/jwt"
 	reflect "reflect"
 	time "time"
 

@@ -5,7 +5,7 @@ import (
 	auth "main/internal/database/postgres/auth_repo"
 	dbtest "main/internal/database/postgres/repositoryTest"
 	dom "main/internal/domain/entity"
-	"main/internal/pkg/customerrors"
+	"main/pkg/customerrors"
 	"testing"
 	"time"
 

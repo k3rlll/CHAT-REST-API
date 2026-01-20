@@ -4,7 +4,7 @@ import (
 	"context"
 	repositoryT "main/internal/database/postgres/repositoryTest"
 	"main/internal/database/postgres/user_repo"
-	"main/internal/pkg/customerrors"
+	"main/pkg/customerrors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

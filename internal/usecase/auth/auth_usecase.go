@@ -6,8 +6,10 @@ import (
 	"time"
 
 	dom "main/internal/domain/entity"
-	"main/internal/pkg/customerrors"
-	"main/internal/pkg/jwt"
+	
+	"main/pkg/customerrors"
+	"main/pkg/jwt"
+	"main/pkg/utils"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -18,6 +20,9 @@ type AuthRepository interface {
 	SaveRefreshToken(ctx context.Context, refreshToken dom.RefreshToken) error
 	GetRefreshToken(ctx context.Context, userID int64) (string, error)
 	DeleteRefreshToken(ctx context.Context, userID int64) error
+}
+type UserRepository interface {
+	RegisterUser(ctx context.Context, username, email, passwordHash string) (dom.User, error)
 }
 
 type TokenManager interface {
@@ -31,42 +36,43 @@ type TokenBlacklister interface {
 }
 
 type AuthService struct {
-	repo      AuthRepository
+	repoAuth  AuthRepository
+	repoUser  UserRepository
 	tokenMgr  TokenManager
 	blacklist TokenBlacklister
 	tokenTTL  time.Duration
 }
 
-func NewAuthService(repo AuthRepository, tokenMgr TokenManager, blacklist TokenBlacklister, tokenTTL time.Duration) *AuthService {
+func NewAuthService(repoAuth AuthRepository, repoUser UserRepository, tokenMgr TokenManager, blacklist TokenBlacklister, tokenTTL time.Duration) *AuthService {
 	return &AuthService{
-		repo:      repo,
+		repoAuth:  repoAuth,
+		repoUser:  repoUser,
 		tokenMgr:  tokenMgr,
 		blacklist: blacklist,
 		tokenTTL:  tokenTTL,
 	}
 }
 
-// Обновленный метод LoginUser
-func (s *AuthService) LoginUser(ctx context.Context, username, password string) (string, dom.RefreshToken, error) {
+func (s *AuthService) LoginUser(ctx context.Context, username, password string) (accessToken string, err error) {
 
-	user, err := s.repo.GetCredentialsByUsername(ctx, username)
+	user, err := s.repoAuth.GetCredentialsByUsername(ctx, username)
 	if err != nil {
-		return "", dom.RefreshToken{}, err
+		return "", err
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
 
-		return "", dom.RefreshToken{}, customerrors.ErrInvalidInput
+		return "", customerrors.ErrInvalidInput
 	}
 
 	refreshTokenString, err := s.tokenMgr.NewRefreshToken()
 	if err != nil {
-		return "", dom.RefreshToken{}, fmt.Errorf("service: generate refresh: %w", err)
+		return "", fmt.Errorf("service: generate refresh: %w", err)
 	}
 
 	accessTokenString, err := s.tokenMgr.NewAccessToken(user.ID, s.tokenTTL)
 	if err != nil {
-		return "", dom.RefreshToken{}, fmt.Errorf("service: generate access: %w", err)
+		return "", fmt.Errorf("service: generate access: %w", err)
 	}
 
 	refreshToken := dom.RefreshToken{
@@ -76,14 +82,14 @@ func (s *AuthService) LoginUser(ctx context.Context, username, password string) 
 		ExpiresAt: time.Now().Add(24 * time.Hour * 15),
 	}
 
-	if err := s.repo.SaveRefreshToken(ctx, refreshToken); err != nil {
-		return "", dom.RefreshToken{}, err
+	if err := s.repoAuth.SaveRefreshToken(ctx, refreshToken); err != nil {
+		return "", err
 	}
 
-	return accessTokenString, refreshToken, nil
+	return accessTokenString, nil
 }
 
-func (s *AuthService) LogoutUser(ctx context.Context, accessToken, refreshToken string) error {
+func (s *AuthService) LogoutUser(ctx context.Context, accessToken string) error {
 	claims, err := s.tokenMgr.Parse(accessToken)
 	if err != nil {
 		return fmt.Errorf("invalid access token: %w", err)
@@ -98,9 +104,34 @@ func (s *AuthService) LogoutUser(ctx context.Context, accessToken, refreshToken 
 		}
 	}
 
-	if err := s.repo.DeleteRefreshToken(ctx, claims.UserID); err != nil {
+	if err := s.repoAuth.DeleteRefreshToken(ctx, claims.UserID); err != nil {
 		return fmt.Errorf("db error: %w", err)
 	}
 
 	return nil
+}
+
+func (s *AuthService) RegisterUser(ctx context.Context, username, email, password string) (dom.User, error) {
+
+	if !utils.ValidatePassword(password) {
+		return dom.User{}, customerrors.ErrInvalidInput
+	}
+
+	passwordHash, err := utils.HashPassword(password)
+	if err != nil {
+		return dom.User{}, err
+	}
+
+	res, err := s.repoUser.RegisterUser(ctx, username, email, passwordHash)
+	if err != nil {
+		return dom.User{}, err
+	}
+
+	res = dom.User{
+		ID:       res.ID,
+		Username: res.Username,
+		Email:    res.Email,
+	}
+	return res, nil
+
 }

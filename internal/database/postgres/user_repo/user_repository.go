@@ -3,7 +3,7 @@ package user_repo
 import (
 	"context"
 	dom "main/internal/domain/entity"
-	"main/internal/pkg/customerrors"
+	"main/pkg/customerrors"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )

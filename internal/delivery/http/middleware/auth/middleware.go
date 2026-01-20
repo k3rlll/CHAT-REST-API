@@ -2,11 +2,14 @@ package auth
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	ctxHelper "main/pkg/jwt/context"
 	"net/http"
 	"strings"
 
-	"main/internal/pkg/jwt"
+	"main/pkg/customerrors"
+	"main/pkg/jwt"
 )
 
 type ContextKey string
@@ -63,7 +66,8 @@ func JWTAuth(parser TokenParser, blacklist TokenBlacklistChecker, log *slog.Logg
 				http.Error(w, "invalid token", http.StatusUnauthorized)
 				return
 			}
-			ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
+			ctx := ctxHelper.ToContext(r.Context(), claims)
+
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -77,4 +81,12 @@ func GetUserID(ctx context.Context) (int64, bool) {
 func isWebSocket(r *http.Request) bool {
 	return strings.EqualFold(r.Header.Get("Connection"), "Upgrade") &&
 		strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
+}
+
+func GetUserIDFromContext(ctx context.Context) (int64, error) {
+	userID, ok := ctx.Value("user_id").(int64)
+	if !ok {
+		return 0, fmt.Errorf("user id not found in context: %w", customerrors.ErrUserNotFound)
+	}
+	return userID, nil
 }

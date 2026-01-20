@@ -1,7 +1,7 @@
 package metrics
 
 import (
-	"main/internal/pkg/metrics"
+	"main/pkg/metrics"
 	"net/http"
 	"time"
 

@@ -4,15 +4,13 @@ import (
 	"context"
 	"log/slog"
 	dom "main/internal/domain/entity"
-	"main/internal/pkg/customerrors"
-	"main/internal/pkg/utils"
+	"main/pkg/customerrors"
 	"strings"
 	"time"
 )
 
 //go:generate mockgen -source=user_service.go -destination=mock/user_mock.go -package=mock
 type UserInterface interface {
-	RegisterUser(ctx context.Context, username, email, passwordHash string) (dom.User, error)
 	SearchUser(ctx context.Context, query string) ([]dom.User, error)
 }
 
@@ -33,31 +31,6 @@ func NewUserService(repo UserInterface, logger *slog.Logger) *UserService {
 		Timeout:  3 * time.Hour,
 		MaxLimit: 100,
 	}
-}
-
-func (s *UserService) RegisterUser(ctx context.Context, username, email, password string) (dom.User, error) {
-
-	if !utils.ValidatePassword(password) {
-		return dom.User{}, customerrors.ErrInvalidInput
-	}
-
-	passwordHash, err := utils.HashPassword(password)
-	if err != nil {
-		return dom.User{}, err
-	}
-
-	res, err := s.Repo.RegisterUser(ctx, username, email, passwordHash)
-	if err != nil {
-		return dom.User{}, err
-	}
-
-	res = dom.User{
-		ID:       res.ID,
-		Username: res.Username,
-		Email:    res.Email,
-	}
-	return res, nil
-
 }
 
 func (s *UserService) SearchUser(ctx context.Context, message string) ([]dom.User, error) {

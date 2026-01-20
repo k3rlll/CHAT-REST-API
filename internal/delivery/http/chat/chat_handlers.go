@@ -11,8 +11,8 @@ import (
 
 	mwMiddleware "main/internal/delivery/http/middleware/auth"
 	dom "main/internal/domain/entity"
-	"main/internal/pkg/customerrors"
-	"main/internal/pkg/jwt"
+	"main/pkg/customerrors"
+	"main/pkg/jwt"
 )
 
 type ChatHandler struct {

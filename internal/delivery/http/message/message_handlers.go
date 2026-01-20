@@ -13,7 +13,7 @@ import (
 	mwMiddleware "main/internal/delivery/http/middleware/auth"
 	"main/internal/delivery/ws"
 	dom "main/internal/domain/entity"
-	"main/internal/pkg/jwt"
+	"main/pkg/jwt"
 )
 
 type EditMessageDTO struct {

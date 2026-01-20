@@ -1,4 +1,6 @@
 env: "development"
+auth:
+  token_ttl: 15m
 
 server:
   port: 8082

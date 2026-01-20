@@ -4,7 +4,7 @@ import (
 	"context"
 	"main/internal/database/postgres/chat_repo"
 	dbtest "main/internal/database/postgres/repositoryTest"
-	"main/internal/pkg/customerrors"
+	"main/pkg/customerrors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

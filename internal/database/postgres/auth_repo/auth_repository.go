@@ -8,7 +8,7 @@ import (
 	"time"
 
 	dom "main/internal/domain/entity"
-	"main/internal/pkg/customerrors"
+	"main/pkg/customerrors"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"

@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	dom "main/internal/domain/entity"
-	"main/internal/pkg/customerrors"
-	"main/internal/pkg/jwt"
 	"main/internal/usecase/auth"
 	mock "main/internal/usecase/auth/mock"
+	"main/pkg/customerrors"
+	"main/pkg/jwt"
 	"testing"
 	"time"
 

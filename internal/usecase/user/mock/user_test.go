@@ -5,9 +5,9 @@ import (
 	"io"
 	"log/slog"
 	dom "main/internal/domain/entity"
-	"main/internal/pkg/customerrors"
 	service "main/internal/usecase/user"
 	. "main/internal/usecase/user/mock"
+	"main/pkg/customerrors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

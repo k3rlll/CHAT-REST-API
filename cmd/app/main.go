@@ -17,20 +17,21 @@ import (
 	chat "main/internal/database/postgres/chat_repo"
 	user "main/internal/database/postgres/user_repo"
 	rdb "main/internal/database/redis"
+	interceptor "main/internal/delivery/grpc/middleware"
+	authRPC "main/internal/delivery/grpc/auth"
 	httpHandler "main/internal/delivery/http"
-	AuthHandler "main/internal/delivery/http/auth"
 	ChatHandler "main/internal/delivery/http/chat"
 	MessageHandler "main/internal/delivery/http/message"
 	"main/internal/delivery/http/middleware/metrics"
 	UserHandler "main/internal/delivery/http/user"
 	"main/internal/delivery/ws"
 	kafka "main/internal/infrastructure/kafka"
-	claims "main/internal/pkg/jwt"
 	srvAuth "main/internal/usecase/auth"
 	srvChat "main/internal/usecase/chat"
 	eventHandler "main/internal/usecase/event"
 	srvMessage "main/internal/usecase/message"
 	srvUser "main/internal/usecase/user"
+	claims "main/pkg/jwt"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
@@ -38,6 +39,7 @@ import (
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc"
 )
 
 const (
@@ -142,9 +144,16 @@ func main() {
 
 	//-----------------------Services-------------------------------
 	userService := srvUser.NewUserService(userRepo, logger)
-	authService := srvAuth.NewAuthService(authRepo, jwtManager, NewCache, 15*time.Minute)
+	authService := srvAuth.NewAuthService(authRepo, userRepo, jwtManager, NewCache, cfg.Auth.TokenTTL)
 	chatService := srvChat.NewChatService(userRepo, chatRepo, logger)
 	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, producer, logger)
+
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(
+			interceptor.AuthInterceptor(jwtManager),
+		),
+	)
+	defer grpcServer.GracefulStop()
 
 	//-----------------------HTTP Server-------------------------------
 
@@ -166,12 +175,11 @@ func main() {
 
 	//-----------------------Handlers-------------------------------
 	userHandler := UserHandler.NewUserHandler(userService, tokenController, logger)
-	authHandler := AuthHandler.NewAuthHandler(authService, tokenController, logger)
 	chatHandler := ChatHandler.NewChatHandler(messageService, chatService, logger, tokenController)
 	messageHandler := MessageHandler.NewMessageHandler(messageService, chatService, logger, wsManager, tokenController)
+	authRpcHandler:= authRPC.NewAuthHandler(authService, logger)
 
-	HTTP := httpHandler.NewHTTPHandler(userHandler, authHandler, chatHandler, messageHandler, logger)
-
+	HTTP := httpHandler.NewHTTPHandler(userHandler, chatHandler, messageHandler, logger)
 	HTTP.RegisterRoutes(router)
 
 	serverParams := &http.Server{

@@ -7,9 +7,9 @@ import (
 	"log/slog"
 	dom "main/internal/domain/entity"
 	events "main/internal/domain/events"
-	"main/internal/pkg/customerrors"
 	service "main/internal/usecase/message"
 	mock "main/internal/usecase/message/mock"
+	"main/pkg/customerrors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

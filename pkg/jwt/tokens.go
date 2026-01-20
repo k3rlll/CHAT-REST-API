@@ -12,6 +12,7 @@ import (
 type TokenClaims struct {
 	UserID int64
 	Exp    int64
+	
 }
 
 type Manager struct {

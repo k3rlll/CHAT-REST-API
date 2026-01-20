@@ -8,7 +8,7 @@ import (
 	"time"
 
 	dom "main/internal/domain/entity"
-	"main/internal/pkg/customerrors"
+	"main/pkg/customerrors"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"

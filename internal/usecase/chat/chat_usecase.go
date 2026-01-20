@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	dom "main/internal/domain/entity"
-	"main/internal/pkg/customerrors"
+	"main/pkg/customerrors"
 	"time"
 )
 

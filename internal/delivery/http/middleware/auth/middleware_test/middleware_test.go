@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	middleware "main/internal/delivery/http/middleware/auth"
-	"main/internal/pkg/jwt"
+	"main/pkg/jwt"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

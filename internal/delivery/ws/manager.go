@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"sync"
 
-	"main/internal/pkg/metrics"
+	"main/pkg/metrics"
 
 	"github.com/gorilla/websocket"
 )
