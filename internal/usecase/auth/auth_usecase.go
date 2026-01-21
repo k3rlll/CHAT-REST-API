@@ -6,7 +6,7 @@ import (
 	"time"
 
 	dom "main/internal/domain/entity"
-	
+
 	"main/pkg/customerrors"
 	"main/pkg/jwt"
 	"main/pkg/utils"
@@ -89,10 +89,10 @@ func (s *AuthService) LoginUser(ctx context.Context, username, password string) 
 	return accessTokenString, nil
 }
 
-func (s *AuthService) LogoutUser(ctx context.Context, accessToken string) error {
+func (s *AuthService) LogoutUser(ctx context.Context, accessToken string) (bool, error) {
 	claims, err := s.tokenMgr.Parse(accessToken)
 	if err != nil {
-		return fmt.Errorf("invalid access token: %w", err)
+		return false, fmt.Errorf("invalid access token: %w", err)
 	}
 
 	expirationTime := time.Unix(claims.Exp, 0)
@@ -100,15 +100,15 @@ func (s *AuthService) LogoutUser(ctx context.Context, accessToken string) error 
 
 	if ttl > 0 {
 		if err := s.blacklist.Set(ctx, accessToken, "blacklisted", ttl); err != nil {
-			return fmt.Errorf("redis blacklist error: %w", err)
+			return false, fmt.Errorf("redis blacklist error: %w", err)
 		}
 	}
 
 	if err := s.repoAuth.DeleteRefreshToken(ctx, claims.UserID); err != nil {
-		return fmt.Errorf("db error: %w", err)
+		return false, fmt.Errorf("db error: %w", err)
 	}
 
-	return nil
+	return true, nil
 }
 
 func (s *AuthService) RegisterUser(ctx context.Context, username, email, password string) (dom.User, error) {

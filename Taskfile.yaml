@@ -3,8 +3,6 @@ version: 3
 
 tasks:
   generate:
-    alias: 
-      - gen
     cmds:
-      - protoc -I api/proto --go_out=./pkg/proto/gen --go_opt=paths=source_relative --go-grpc_out=./pkg/proto/gen --go-grpc_opt=paths=source_relative api/proto/auth/auth.proto    
+      - protoc -I api/proto --go_out=pkg/proto/gen --go_opt=paths=source_relative --go-grpc_out=pkg/proto/gen --go-grpc_opt=paths=source_relative --grpc-gateway_out=pkg/proto/gen --grpc-gateway_opt=paths=source_relative api/proto/auth/v1/auth.proto 
     desc: Generate Go code from .proto files

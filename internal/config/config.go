@@ -15,6 +15,11 @@ type Metrics struct {
 	Host    string `yaml:"host" env:"METRICS_HOST" env-default:"localhost"`
 }
 
+type GrpcServer struct {
+	Host string `yaml:"host" env:"GRPC_HOST" env-default:"0.0.0.0"`
+	Port int    `yaml:"port" env:"GRPC_PORT" env-default:"50052"`
+}
+
 type Server struct {
 	Port        int           `yaml:"port" env:"SERVER_PORT" env-default:"8082"`
 	Mode        string        `yaml:"mode" env:"SERVER_MODE" env-default:"debug"`
@@ -60,14 +65,15 @@ type Auth struct {
 }
 
 type Config struct {
-	Env      string   `yaml:"env" env:"ENV" env-default:"development"`
-	Server   Server   `yaml:"server"`
-	Postgres Postgres `yaml:"postgres"`
-	MongoDB  MongoDB  `yaml:"mongodb"`
-	Redis    Redis    `yaml:"redis"`
-	Kafka    Kafka    `yaml:"kafka"`
-	Metrics  Metrics  `yaml:"metrics"`
-	Auth     Auth     `yaml:"auth"`
+	Env      string     `yaml:"env" env:"ENV" env-default:"development"`
+	Server   Server     `yaml:"server"`
+	Postgres Postgres   `yaml:"postgres"`
+	MongoDB  MongoDB    `yaml:"mongodb"`
+	Redis    Redis      `yaml:"redis"`
+	Kafka    Kafka      `yaml:"kafka"`
+	Metrics  Metrics    `yaml:"metrics"`
+	Auth     Auth       `yaml:"auth"`
+	Grpc     GrpcServer `yaml:"grpc"`
 }
 
 type EnvConfig struct {

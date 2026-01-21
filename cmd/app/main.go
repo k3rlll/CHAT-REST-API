@@ -2,13 +2,17 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	config "main/internal/config"
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"sync"
+	"syscall"
 	"time"
 
 	msg "main/internal/database/mongo"
@@ -17,8 +21,8 @@ import (
 	chat "main/internal/database/postgres/chat_repo"
 	user "main/internal/database/postgres/user_repo"
 	rdb "main/internal/database/redis"
-	interceptor "main/internal/delivery/grpc/middleware"
 	authRPC "main/internal/delivery/grpc/auth"
+	interceptor "main/internal/delivery/grpc/middleware"
 	httpHandler "main/internal/delivery/http"
 	ChatHandler "main/internal/delivery/http/chat"
 	MessageHandler "main/internal/delivery/http/message"
@@ -32,6 +36,7 @@ import (
 	srvMessage "main/internal/usecase/message"
 	srvUser "main/internal/usecase/user"
 	claims "main/pkg/jwt"
+	pb "main/pkg/proto/gen/auth/v1"
 
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
@@ -148,13 +153,6 @@ func main() {
 	chatService := srvChat.NewChatService(userRepo, chatRepo, logger)
 	messageService := srvMessage.NewMessageService(chatRepo, msgRepo, producer, logger)
 
-	grpcServer := grpc.NewServer(
-		grpc.UnaryInterceptor(
-			interceptor.AuthInterceptor(jwtManager),
-		),
-	)
-	defer grpcServer.GracefulStop()
-
 	//-----------------------HTTP Server-------------------------------
 
 	wsManager := ws.NewManager(logger)
@@ -177,10 +175,13 @@ func main() {
 	userHandler := UserHandler.NewUserHandler(userService, tokenController, logger)
 	chatHandler := ChatHandler.NewChatHandler(messageService, chatService, logger, tokenController)
 	messageHandler := MessageHandler.NewMessageHandler(messageService, chatService, logger, wsManager, tokenController)
-	authRpcHandler:= authRPC.NewAuthHandler(authService, logger)
+	authRpcHandler := authRPC.NewAuthHandler(authService, logger)
 
 	HTTP := httpHandler.NewHTTPHandler(userHandler, chatHandler, messageHandler, logger)
 	HTTP.RegisterRoutes(router)
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	serverParams := &http.Server{
 		Addr:         addr,
@@ -193,8 +194,14 @@ func main() {
 		Addr:    net.JoinHostPort(cfg.Metrics.Host, strconv.Itoa(cfg.Metrics.Port)),
 		Handler: metricsRouter,
 	}
+	grpcServer := grpc.NewServer(
+		grpc.UnaryInterceptor(
+			interceptor.AuthInterceptor(jwtManager),
+		),
+	)
+	pb.RegisterAuthServiceServer(grpcServer, authRpcHandler)
 
-	g, gCtx := errgroup.WithContext(context.Background())
+	g, gCtx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
 		logger.Info("Metrics server is starting", slog.String("addr", metricsParams.Addr))
@@ -204,32 +211,77 @@ func main() {
 		return nil
 	})
 	g.Go(func() error {
+		lis, err := net.Listen("tcp", net.JoinHostPort(cfg.Grpc.Host, strconv.Itoa(cfg.Grpc.Port)))
+		if err != nil {
+			return err
+		}
+		logger.Info("gRPC server is starting", slog.String("addr", lis.Addr().String()))
+		if err := grpcServer.Serve(lis); err != nil {
+			return err
+		}
+		return nil
+	})
+
+	g.Go(func() error {
 		logger.Info("HTTP server is starting", slog.String("addr", serverParams.Addr))
 		if err := serverParams.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			return err
 		}
 		return nil
 	})
+	// --- Shutdown Orchestrator ---
 	g.Go(func() error {
 		<-gCtx.Done()
-		logger.Info("shutting down servers")
+		logger.Info("shutting down servers...")
 
 		shutDownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		if err := serverParams.Shutdown(shutDownCtx); err != nil {
-			logger.Error("HTTP server shutdown failed", slog.String("error", err.Error()))
+
+		var wg sync.WaitGroup
+		wg.Add(3)
+
+		go func() {
+			defer wg.Done()
+			if err := serverParams.Shutdown(shutDownCtx); err != nil {
+				logger.Error("HTTP server shutdown failed", slog.String("error", err.Error()))
+			}
+		}()
+
+		go func() {
+			defer wg.Done()
+			if err := metricsParams.Shutdown(shutDownCtx); err != nil {
+				logger.Error("Metrics server shutdown failed", slog.String("error", err.Error()))
+			}
+		}()
+
+		go func() {
+			defer wg.Done()
+			grpcServer.GracefulStop()
+		}()
+
+		done := make(chan struct{})
+		go func() {
+			wg.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+			logger.Info("All servers stopped gracefully")
+		case <-shutDownCtx.Done():
+			logger.Warn("Shutdown timeout exceeded, forcing stop")
+			grpcServer.Stop()
 		}
-		if err := metricsParams.Shutdown(shutDownCtx); err != nil {
-			logger.Error("Metrics server shutdown failed", slog.String("error", err.Error()))
-		}
+
 		return nil
 	})
 
 	if err := g.Wait(); err != nil {
-		logger.Error("Application stopped with error", slog.Any("err", err))
-		os.Exit(1)
+		if !errors.Is(err, context.Canceled) {
+			logger.Error("Application stopped with error", slog.Any("err", err))
+			os.Exit(1)
+		}
 	}
-	logger.Info("Application stopped gracefully")
+	logger.Info("Application exited properly")
 
 }
 
