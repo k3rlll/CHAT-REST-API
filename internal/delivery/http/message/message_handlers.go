@@ -3,15 +3,18 @@ package message
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/go-chi/chi"
+	"github.com/go-redis/redis/v8"
 
 	mwMiddleware "main/internal/delivery/http/middleware/auth"
 	"main/internal/delivery/ws"
+	pb "main/internal/delivery/ws/events_proto/websocket/v1"
 	dom "main/internal/domain/entity"
 	"main/pkg/jwt"
 )
@@ -49,33 +52,36 @@ type JWTManager interface {
 }
 
 type MessageHandler struct {
-	MessSrv  MessageService
-	ChatSrv  ChatService
-	logger   *slog.Logger
-	upgrader *ws.Manager
-	Manager  JWTManager
+	MessSrv MessageService
+	ChatSrv ChatService
+	logger  *slog.Logger
+	Manager *ws.Manager
+	JWT     JWTManager
+	rdb     *redis.Client
 }
 
 func NewMessageHandler(
 	messSrv MessageService,
 	chatSrv ChatService,
 	logger *slog.Logger,
-	upgrader *ws.Manager,
+	manager *ws.Manager,
 	tokenManager JWTManager,
+	rdb *redis.Client,
 ) *MessageHandler {
 	return &MessageHandler{
-		MessSrv:  messSrv,
-		ChatSrv:  chatSrv,
-		logger:   logger,
-		upgrader: upgrader,
-		Manager:  tokenManager,
+		MessSrv: messSrv,
+		ChatSrv: chatSrv,
+		logger:  logger,
+		Manager: manager,
+		JWT:     tokenManager,
+		rdb:     rdb,
 	}
 }
 
 // /chats/{id}/messages
 func (h *MessageHandler) RegisterRoutes(r chi.Router) {
 	r.Group(func(r chi.Router) {
-		r.Use(mwMiddleware.JWTAuth(h.Manager, h.Manager, h.logger))
+		r.Use(mwMiddleware.JWTAuth(h.JWT, h.JWT, h.logger))
 
 		r.Post("/", h.SendMessage)
 		r.Delete("/{msg_id}", h.DeleteMessageHandler)
@@ -100,7 +106,8 @@ func (h *MessageHandler) ConnectWebSocket(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	h.upgrader.HandleConnection(w, r, claims.UserID)
+	userID := fmt.Sprintf("%d", claims.UserID)
+	h.upgrader.ServeWS(w, r, userID)
 }
 
 func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
@@ -125,26 +132,14 @@ func (h *MessageHandler) SendMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go func(ctx context.Context, chatID int64, senderID int64) {
-		membersId, err := h.ChatSrv.GetChatDetails(ctx, chatID, senderID)
-		if err != nil {
-			h.logger.Error("failed to get chat members", slog.Any("error", err.Error()))
-			return
-		}
+	var event *pb.WebSocketEvent
+	event = &pb.WebSocketEvent{
+		SenderId:  strconv.FormatInt(request.SenderID, 10),
+		RoomId:    strconv.FormatInt(request.ChatID, 10),
+		EventType: "new_message",
+	}
 
-		wsPayload := map[string]interface{}{
-			"type": "new_message",
-			"data": message,
-		}
-
-		for _, memberID := range membersId.MembersID {
-			if memberID == request.SenderID {
-				continue
-			}
-			h.upgrader.WsUnicast(memberID, wsPayload)
-		}
-
-	}(context.Background(), request.ChatID, request.SenderID)
+	h.rdb.Publish(h.Manager.Ctx, "chat_events", event)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

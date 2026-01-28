@@ -1,0 +1,13 @@
+syntax = "proto3";
+package websocket.v1;
+
+option go_package = "main/pkg/proto/gen/websocket/v1;websocketv1";
+
+
+message WebSocketEvent {
+    string sender_id = 1;
+    string sender_username = 3;
+    string room_id = 5;
+    string event_type = 6;
+    bytes data = 7;
+}

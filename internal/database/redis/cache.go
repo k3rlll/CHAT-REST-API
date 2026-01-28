@@ -52,3 +52,15 @@ func (c *Cache) Exists(ctx context.Context, key string) (bool, error) {
 	}
 	return result > 0, nil
 }
+
+func (c *Cache) Publish(ctx context.Context, channel string, message interface{}) error {
+	err := c.Client.Publish(ctx, channel, message).Err()
+	if err != nil {
+		return fmt.Errorf("failed to publish to redis channel: %w", err)
+	}
+	return nil
+}
+
+func (c *Cache) Subscribe(ctx context.Context, channels ...string) *redis.PubSub {
+	return c.Client.Subscribe(ctx, channels...)
+}

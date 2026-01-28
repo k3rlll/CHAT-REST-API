@@ -1,88 +1,119 @@
 package ws
 
 import (
-	"log/slog"
+	"context"
+	"fmt"
+	pb "main/internal/delivery/ws/events_proto/websocket/v1"
 	"net/http"
 	"sync"
+	"time"
 
-	"main/pkg/metrics"
-
-	"github.com/gorilla/websocket"
+	"github.com/coder/websocket"
+	"github.com/go-chi/chi"
+	"github.com/redis/go-redis/v9"
+	"google.golang.org/protobuf/proto"
 )
 
 type Manager struct {
-	logger   *slog.Logger
-	mu       sync.RWMutex
-	clients  map[int64]*websocket.Conn
-	upgrader websocket.Upgrader
+	Clients map[*Client]bool
+	sync.RWMutex
+	register   chan *Client
+	unregister chan *Client
+	broadcast  chan *pb.WebSocketEvent
+	rooms      map[string]map[*Client]bool
+	Ctx        context.Context
+	rdb        *redis.Client
 }
 
-func NewManager(logger *slog.Logger) *Manager {
+func NewManager(ctx context.Context, rdb *redis.Client) *Manager {
 	return &Manager{
-		logger:  logger,
-		clients: make(map[int64]*websocket.Conn),
-		upgrader: websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-			CheckOrigin:     func(r *http.Request) bool { return true },
-		},
+		Clients:    make(map[*Client]bool),
+		register:   make(chan *Client),
+		unregister: make(chan *Client),
+		broadcast:  make(chan *pb.WebSocketEvent),
+		rooms:      make(map[string]map[*Client]bool),
+		Ctx:        ctx,
+		rdb:        rdb,
 	}
 }
 
-func (m *Manager) HandleConnection(w http.ResponseWriter, r *http.Request, userID int64) (*websocket.Conn, error) {
-	conn, err := m.upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		m.logger.Error("failed to upgrade connection", "error", err)
-		return nil, err
-	}
-
-	m.mu.Lock()
-	m.clients[userID] = conn
-	m.mu.Unlock()
-
-	m.logger.Info("User connected via WS", "userID", userID)
-
-	defer func() {
-		if err := conn.Close(); err != nil {
-			m.logger.Error("failed to close connection", "error", err)
-		}
-	}()
-
-	for {
-		_, _, err := conn.ReadMessage()
-		if err != nil {
-			m.logger.Error("failed to read message", "error", err)
-			break
-		}
-	}
-
-	return conn, nil
-}
-
-func (m *Manager) WsUnicast(userID int64, data interface{}) {
-	m.mu.RLock()
-	conn, ok := m.clients[userID]
-	m.mu.RUnlock()
-	if !ok {
+func (m *Manager) ServeWS(w http.ResponseWriter, r *http.Request, userID string) {
+	roomID := chi.URLParam(r, "roomID")
+	if roomID == "" {
+		fmt.Println("roomID is required")
+		http.Error(w, "roomID is required", http.StatusBadRequest)
 		return
 	}
-	if err := conn.WriteJSON(data); err != nil {
-		m.logger.Error("failed to write JSON message", "userID", userID, "error", err)
-		m.removeClient(userID)
-		conn.Close()
+
+	conn, err := websocket.Accept(w, r, nil)
+	conn.SetReadLimit(1024 * 1024) // 1 MB
+	if err != nil {
+		fmt.Println("WebSocket Accept Error:", err)
+		return
+	}
+
+	client := NewClient(m, conn, roomID, userID)
+	m.register <- client
+
+	go client.Heartbeat(r.Context())
+
+	go client.WriteMessages(r.Context())
+	client.ReadMessages(r.Context())
+
+}
+func (m *Manager) Run() {
+	for {
+		select {
+		case client := <-m.register:
+			if _, ok := m.rooms[client.roomID]; !ok {
+				m.rooms[client.roomID] = make(map[*Client]bool)
+			}
+
+			m.rooms[client.roomID][client] = true
+		case client := <-m.unregister:
+			if clientsInRoom, ok := m.rooms[client.roomID]; ok {
+				if _, ok := clientsInRoom[client]; ok {
+					delete(clientsInRoom, client)
+					close(client.send)
+					if len(clientsInRoom) == 0 {
+						delete(m.rooms, client.roomID)
+					}
+				}
+			}
+
+		case event := <-m.broadcast:
+			if clientsInRoom, ok := m.rooms[event.RoomId]; ok {
+				for client := range clientsInRoom {
+					if event.SenderId == client.userID {
+						continue
+					}
+					select {
+					case client.send <- event.Data:
+					default:
+						close(client.send)
+						delete(clientsInRoom, client)
+					}
+				}
+			}
+		}
 	}
 }
 
-func (m *Manager) AddClient(userID int64, conn *websocket.Conn) {
-	metrics.ActiveWebSocketConnections.Inc()
-	m.mu.Lock()
-	m.clients[userID] = conn
-	m.mu.Unlock()
-}
+func (m *Manager) ListenRedis() {
+	subscriber := m.rdb.Subscribe(m.Ctx, "chat_events")
+	defer subscriber.Close()
+	ch := subscriber.Channel(
+		redis.WithChannelHealthCheckInterval(30*time.Second),
+		redis.WithChannelSize(1000),
+	)
+	for msg := range ch {
+		event := &pb.WebSocketEvent{}
+		err := proto.Unmarshal([]byte(msg.Payload), event)
+		if err != nil {
+			fmt.Println("Protobuf unmarshal error:", err)
+			continue
+		}
 
-func (m *Manager) removeClient(userID int64) {
-	metrics.ActiveWebSocketConnections.Dec()
-	m.mu.Lock()
-	delete(m.clients, userID)
-	m.mu.Unlock()
+		m.broadcast <- event
+	}
 }

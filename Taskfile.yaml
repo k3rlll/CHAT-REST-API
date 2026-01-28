@@ -2,7 +2,12 @@ version: 3
 
 
 tasks:
-  generate:
+  generate-auth-proto:
     cmds:
       - protoc -I api/proto --go_out=pkg/proto/gen --go_opt=paths=source_relative --go-grpc_out=pkg/proto/gen --go-grpc_opt=paths=source_relative --grpc-gateway_out=pkg/proto/gen --grpc-gateway_opt=paths=source_relative api/proto/auth/v1/auth.proto 
+    desc: Generate Go code from .proto files
+  
+  generate-websocket-proto:
+    cmds:
+      - protoc -I api/proto --go_out=internal/delivery/ws/events_proto --go_opt=paths=source_relative --go-grpc_out=internal/delivery/ws/events_proto --go-grpc_opt=paths=source_relative --grpc-gateway_out=internal/delivery/ws/events_proto --grpc-gateway_opt=paths=source_relative api/proto/websocket/v1/websocket.proto 
     desc: Generate Go code from .proto files
